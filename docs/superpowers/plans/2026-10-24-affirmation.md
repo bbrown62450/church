@@ -1362,7 +1362,7 @@ BEHIND_WARNING = f"schema revision None != head {SCHEMA_HEAD}"
 - [ ] **Step 2: Run them and see them fail**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_api_affirmation.py backend/tests/test_migrations.py backend/tests/test_schema_check.py backend/tests/test_api_app.py backend/tests/test_services_postgres.py backend/tests/test_api_me.py backend/tests/test_api_invites.py backend/tests/test_api_churches.py backend/tests/test_api_church_profile.py 2>&1 | tail -1`
-**Expected:** `@@T2FAIL@@`.
+**Expected:** `33 failed, 154 passed, 20 skipped in <t>s`.
 
 - [ ] **Step 3: Write the migration, the storage, the API and the default**
 
@@ -2106,12 +2106,12 @@ then prints the Apostles' Creed again), and come back when the PR does.
 - [ ] **Step 4: Regenerate the OpenAPI snapshot and the API types**
 
 Run: `.venv/bin/python backend/scripts/export_openapi.py; (cd frontend && npm run gen:api >/dev/null 2>&1; echo "gen $?"); git diff --stat -- frontend/src/lib/api/openapi.json frontend/src/lib/api/schema.d.ts backend/tests/fixtures/shared/liturgy_outline.json | tail -1`
-**Expected:** `Wrote <repo root>/frontend/src/lib/api/openapi.json`, `gen 0`, then ` @@T2STAT@@` (the outline fixture does not change). CI's `frontend` job regenerates `schema.d.ts` and fails on drift, so it is committed here, in PR A, although no page uses the new types until PR B.
+**Expected:** `Wrote <repo root>/frontend/src/lib/api/openapi.json`, `gen 0`, then ` 2 files changed, 208 insertions(+), 1 deletion(-)` (the outline fixture does not change). CI's `frontend` job regenerates `schema.d.ts` and fails on drift, so it is committed here, in PR A, although no page uses the new types until PR B.
 
 - [ ] **Step 5: Run them, the SQL preview, the suite and today's pages against the new types**
 
 Run: the Step 2 command; then `(cd backend && DATABASE_URL=postgresql://preview@localhost:1/preview ../.venv/bin/alembic upgrade 0009_memberships_one_owner:0010_services_affirmation --sql 2>/dev/null | grep -v -e '^--' -e '^$' | sed 's/ *$//')`; then `.venv/bin/python -m pytest -q backend/tests 2>&1 | tail -1`; then the frontend suite, typecheck and lint.
-**Expected:** `@@T2PASS@@`; the six lines of `backend/migrations/README.md` "Before 0010_services_affirmation" Step 3 exactly; `2288 passed, 50 skipped in <t>s`; then today's pages, unchanged, against PR A's types and fixtures:
+**Expected:** `187 passed, 20 skipped in <t>s`; the six lines of `backend/migrations/README.md` "Before 0010_services_affirmation" Step 3 exactly; `2288 passed, 50 skipped in <t>s`; then today's pages, unchanged, against PR A's types and fixtures:
 ```
  Test Files  119 passed (119)
       Tests  1122 passed (1122)
@@ -2138,15 +2138,15 @@ Each row breaks one rule the tests must hold. For each: make the change in the n
 
 | # | Rule | Change | Run | Expected |
 |---|---|---|---|---|
-| P1 | switched off prints nothing in the Word files | `backend/worship_service.py`: `    if faith.prints():` → `    if True:` | `backend/tests/test_affirmation.py` | `@@P1@@` |
-| P2 | switched off prints nothing in the printed bulletin (PDF, Word) and the email | `backend/printed_bulletin.py`: `    if not a.prints():` → `    if False:` | `backend/tests/test_affirmation.py` | `@@P2@@` |
-| P3 | own text prints as typed | `backend/worship_service.py`: `faith.text if faith.choice == "own" else CHOICE_LABELS[faith.choice]` → `CHOICE_LABELS[faith.choice]` | `backend/tests/test_affirmation.py` | `@@P3@@` |
-| P4 | a body without it prints as today | `backend/usecases/documents.py`, the first `affirmation=clean.affirmation or Affirmation())` → `affirmation=clean.affirmation or Affirmation(True, "nicene"))` | `backend/tests/test_affirmation.py backend/tests/test_api_affirmation.py` | `@@P4@@` |
-| P5 | members cannot change the church default | `backend/api/routes/me.py`: `Depends(require_admin),` → `Depends(require_church),`, and in `backend/usecases/church_admin.py` `update_profile` delete the line `        require_admin_role(role)` | `backend/tests/test_api_affirmation.py` | `@@P5@@` (either guard alone still refuses) |
-| P6 | a saved service without it keeps NULL, and a PUT without it keeps the saved choice | `backend/usecases/archive.py`: `        **({} if clean.affirmation is None else {"affirmation": clean.affirmation.to_json()}),` → `        "affirmation": (clean.affirmation or af.Affirmation()).to_json(),` | `backend/tests/test_api_affirmation.py` | `@@P6@@` |
-| P7 | the outline is unchanged, so today's pages keep their row | `backend/liturgy_config.py`: `"fixed", "Apostles' Creed",` → `"none", None,` | `backend/tests/test_api_affirmation.py` | `@@P7@@` |
-| P8 | each Nicene sense line wraps with a hanging indent (PDF and Word) | `backend/printed_bulletin.py`: `else [Line("hanging", (Span(sense, bold=True),))` → `else [Line("bold", (Span(sense, bold=True),))` | `backend/tests/test_affirmation.py` | `@@P8@@` |
-| P9 | the after-deploy check runs before 0010 too | `backend/migrations/README.md`: `         WHERE to_jsonb(s) ->> 'affirmation' IS NOT NULL) AS with_affirmation;` → `         WHERE affirmation IS NOT NULL) AS with_affirmation;` | T4 Step 3's Postgres command with `backend/tests/test_migrations.py -k 0010` | `@@P9@@` |
+| P1 | switched off prints nothing in the Word files | `backend/worship_service.py`: `    if faith.prints():` → `    if True:` | `backend/tests/test_affirmation.py` | `5 failed, 15 passed` |
+| P2 | switched off prints nothing in the printed bulletin (PDF, Word) and the email | `backend/printed_bulletin.py`: `    if not a.prints():` → `    if False:` | `backend/tests/test_affirmation.py` | `2 failed, 18 passed` |
+| P3 | own text prints as typed | `backend/worship_service.py`: `faith.text if faith.choice == "own" else CHOICE_LABELS[faith.choice]` → `CHOICE_LABELS[faith.choice]` | `backend/tests/test_affirmation.py` | `1 failed, 19 passed` |
+| P4 | a body without it prints as today | `backend/usecases/documents.py`, the first `affirmation=clean.affirmation or Affirmation())` → `affirmation=clean.affirmation or Affirmation(True, "nicene"))` | `backend/tests/test_affirmation.py backend/tests/test_api_affirmation.py` | `2 failed, 30 passed` |
+| P5 | members cannot change the church default | `backend/api/routes/me.py`: `Depends(require_admin),` → `Depends(require_church),`, and in `backend/usecases/church_admin.py` `update_profile` delete the line `        require_admin_role(role)` | `backend/tests/test_api_affirmation.py` | `1 failed, 11 passed` (either guard alone still refuses) |
+| P6 | a saved service without it keeps NULL, and a PUT without it keeps the saved choice | `backend/usecases/archive.py`: `        **({} if clean.affirmation is None else {"affirmation": clean.affirmation.to_json()}),` → `        "affirmation": (clean.affirmation or af.Affirmation()).to_json(),` | `backend/tests/test_api_affirmation.py` | `2 failed, 10 passed` |
+| P7 | the outline is unchanged, so today's pages keep their row | `backend/liturgy_config.py`: `"fixed", "Apostles' Creed",` → `"none", None,` | `backend/tests/test_api_affirmation.py` | `1 failed, 11 passed` |
+| P8 | each Nicene sense line wraps with a hanging indent (PDF and Word) | `backend/printed_bulletin.py`: `else [Line("hanging", (Span(sense, bold=True),))` → `else [Line("bold", (Span(sense, bold=True),))` | `backend/tests/test_affirmation.py` | `2 failed, 18 passed` |
+| P9 | the after-deploy check runs before 0010 too | `backend/migrations/README.md`: `         WHERE to_jsonb(s) ->> 'affirmation' IS NOT NULL) AS with_affirmation;` → `         WHERE affirmation IS NOT NULL) AS with_affirmation;` | T4 Step 3's Postgres command with `backend/tests/test_migrations.py -k 0010` | `1 failed, 60 deselected` |
 
 Backend rows: `.venv/bin/python -m pytest -q <files> 2>&1 | tail -1`.
 
@@ -2169,12 +2169,12 @@ Run: the frontend suite; typecheck and lint; `(cd frontend && npm run build 2>&1
 - [ ] **Step 3: Postgres, as CI's `backend-postgres` job**
 
 On a throwaway local cluster (never production), as the `postgres` user under `/var/lib/postgresql/<new dir>`, port 55432, trust auth: CI's command from the repo root, `TEST_DATABASE_URL=postgresql://postgres@localhost:55432/postgres .venv/bin/python -m pytest -m postgres -q 2>&1 | tail -1`; then plant P9 (T3) and run `TEST_DATABASE_URL=postgresql://postgres@localhost:55432/postgres .venv/bin/python -m pytest -m postgres -q backend/tests/test_migrations.py -k 0010 2>&1 | tail -1`, and undo it; then, on a new database `ci_check` there, from `backend/` with `DATABASE_URL` pointing at it: `alembic upgrade head 2>&1 | grep "Running upgrade 0009"`, `alembic check`, `alembic downgrade base`, `alembic upgrade head`, `alembic current`. Stop the cluster and delete its directory afterwards.
-**Expected:** `50 passed, 2319 deselected, 1 warning in <t>s`; P9: `@@P9@@`; the upgrade prints the README's Step 4 line exactly (`INFO  [alembic.runtime.migration] Running upgrade 0009_memberships_one_owner -> 0010_services_affirmation, Services: the Affirmation of Faith (affirmation spec, "Data shape")`); each command exits 0, `check` prints `No new upgrade operations detected.`, `current` prints `0010_services_affirmation (head)`.
+**Expected:** `50 passed, 2319 deselected, 1 warning in <t>s`; P9: `1 failed, 60 deselected`; the upgrade prints the README's Step 4 line exactly (`INFO  [alembic.runtime.migration] Running upgrade 0009_memberships_one_owner -> 0010_services_affirmation, Services: the Affirmation of Faith (affirmation spec, "Data shape")`); each command exits 0, `check` prints `No new upgrade operations detected.`, `current` prints `0010_services_affirmation (head)`.
 
 - [ ] **Step 4: No em dash added, nothing frozen touched, the branch's paths**
 
 Run: `git diff origin/main...HEAD | grep '^+' | grep -c $'\xe2\x80\x94'`; `git diff --name-only origin/main...HEAD -- app.py streamlit_views streamlit_auth.py streamlit_tenancy.py ui_helpers.py streamlit_tests requirements.txt requirements-dev.txt .github | wc -l`; `git diff --name-status origin/main...HEAD | awk '{print $1}' | sort | uniq -c`
-**Expected:** `0`; `0`; `@@PATHSA@@` (the four new backend files, the spec, this plan and the decisions doc; the modified files of T1-T2, the generated OpenAPI snapshot and types, the test fixtures and `docs/ops-runbook.md`, whose Theme PR 1 record rides along). Anything else: find why before the PR.
+**Expected:** `0`; `0`; `7 A` and `25 M` (the four new backend files, the spec, this plan and the decisions doc; the modified files of T1-T2, the generated OpenAPI snapshot and types, the test fixtures and `docs/ops-runbook.md`, whose Theme PR 1 record rides along). Anything else: find why before the PR.
 
 ### Task 5: Before PR A's merge: the migration routine (OWNER + agent)
 
@@ -2319,7 +2319,7 @@ Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git push origin claude/slice-2-plan-4q33le
 ```
 
-**Expected:** `0`; `0`; `0`; `@@DOCS@@`; one commit, pushed. Part 1 is done; Part 2 starts from here.
+**Expected:** `0`; `0`; `0`; `89 passed in <t>s`; one commit, pushed. Part 1 is done; Part 2 starts from here.
 
 # Part 2: Affirmation PR B (the pages)
 
@@ -4944,7 +4944,7 @@ git commit -q -m "Runbook: Affirmation PR B record" -m "Records PR #<NB>: the me
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 ```
 
-**Expected:** `0`; `0`; `0`; `@@DOCS@@`; one commit.
+**Expected:** `0`; `0`; `0`; `89 passed in <t>s`; one commit.
 
 - [ ] **Step 13 (agent, on the owner's yes): Push, open and merge the records PR**
 
