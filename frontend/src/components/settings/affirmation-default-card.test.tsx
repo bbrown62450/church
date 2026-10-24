@@ -4,7 +4,7 @@
  * save it with PATCH /church; members read it and cannot change it. Rendered
  * as the route is, inside the Settings layout, with a Toaster.
  */
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -92,6 +92,19 @@ describe("Settings → Liturgy: the Affirmation of Faith default (affirmation sp
     await user.click(within(card).getByRole("radio", { name: "Your own text" }));
     const box = within(card).getByRole("textbox", { name: "Your church's own text" });
     expect(box).toHaveAttribute("maxlength", String(liturgyConfig().limits.max_section_text));
+  });
+
+  it("never sends own text left blank, even when the form is submitted without the button (Affirmation PR B build review 4)", async () => {
+    const { user, api } = renderPage("admin");
+    const card = await form();
+    await user.click(within(card).getByRole("radio", { name: "Your own text" }));
+    await user.type(within(card).getByRole("textbox", { name: "Your church's own text" }), "   ");
+    fireEvent.submit(card); // as Enter in a field would, past the disabled button
+    // A change that can be saved, submitted the same way, is sent: the guard, not the submit, held the first back.
+    await user.click(within(card).getByRole("radio", { name: "Nicene Creed" }));
+    fireEvent.submit(card);
+    expect(await screen.findByText(AFFIRMATION_SAVED)).toBeInTheDocument();
+    expect(patches(api).map((r) => r.body)).toEqual([{ default_affirmation: { choice: "nicene", text: "" } }]);
   });
 
   it("shows a creed's text and credit, and asks before leaving with an unsaved change", async () => {
