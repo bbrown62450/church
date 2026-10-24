@@ -104,3 +104,12 @@ Formatting (the next PR; the own text is stored as typed, so the formatting PR c
 - **A stale page** (open before the deploy) sends no `affirmation`: its downloads print the Apostles' Creed and its PUT keeps the saved choice, so it never erases a Nicene choice; its outline shows no Affirmation row until reloaded.
 - **Wording errors in a creed** print in every bulletin: a test pins both texts against the copies taken from ELLC and the current file.
 - **The printed bulletin grows** by the Nicene Creed's 32 lines when chosen; the booklet already flows over pages.
+
+## Questions for the owner
+
+Each has a recommendation, which the plan builds; a different answer changes the plan before the PR.
+
+1. **Which wording of the Apostles' Creed?** Recommended: keep the traditional wording the bulletin prints today ("Holy Ghost", "quick and the dead"): every old service prints exactly as before and it needs no credit line. The alternative is ELLC's contemporary wording ("Holy Spirit", "descended to the dead", "the living and the dead"), which would change what old services print unless it is added as a separate, fourth choice later.
+2. **The Nicene Creed's "and the Son"?** Recommended: include it ("who proceeds from the Father and the Son,"), as the PC(USA) and most Western churches say it; ELLC leaves the choice to each church and prints it in brackets that are not meant to be reproduced. The alternative leaves the words out. (A third option, the 1662 Book of Common Prayer wording, would need no credit line but reads in older English.)
+3. **The migration?** Recommended: yes, `0010_services_affirmation`, one empty nullable column with the same backup, counts and SQL check you did for 0006 (about 10 minutes before the merge). The no-migration alternative (hiding the choice inside the saved liturgy text) is not recommended: the frozen Streamlit app reads that field and expects only text there.
+4. **Should the church default be able to leave the Affirmation out?** Recommended: not now; the default is a choice of creed or own text, and a service switches it off. If your church often has no affirmation, a fourth default "Leave it out" is a small addition.
