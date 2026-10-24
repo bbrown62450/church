@@ -47,7 +47,7 @@ import { savedCopyFingerprint, serviceBody } from "@/lib/documents";
 import { isBlankBulletin, withoutNoPicture } from "@/lib/draft/bulletin";
 import { useDraft } from "@/lib/draft/context";
 import { fingerprint } from "@/lib/draft/fingerprint";
-import { draftToServicePayload, markSaved, serviceToDraft } from "@/lib/draft/mapping";
+import { draftToServicePayload, markSaved, serviceToDraft, TODAYS_AFFIRMATION, type AffirmationPayload } from "@/lib/draft/mapping";
 import { keyForPost, settlePost } from "@/lib/draft/save-key";
 import { freshDraft, type DraftBulletin, type DraftChurch } from "@/lib/draft/schema";
 import { saveMode } from "@/lib/draft/status";
@@ -150,6 +150,11 @@ function withoutCover(b: DraftBulletin): DraftBulletin {
   return { ...b, cover_image_id: null, carried: b.carried.filter((key) => key !== "cover") };
 }
 
+/** The Apostles' Creed switched on: what the server reads a service without one as. */
+function isTodaysAffirmation(a: AffirmationPayload): boolean {
+  return a.include === TODAYS_AFFIRMATION.include && a.choice === TODAYS_AFFIRMATION.choice && a.text === TODAYS_AFFIRMATION.text;
+}
+
 export type SaveVariables = { asNew?: boolean };
 type Saved = { service: ServiceOut; fp: string; fellBack: boolean; sentCover: string | null; fpWithoutCover: string; created: string };
 
@@ -180,9 +185,17 @@ export function useSaveService(church: DraftChurch) {
       // the saved ones. A POST leaves "no picture" (a null cover_image_id)
       // out for the same reason (a POST sent before PR 3b; the server stores
       // no picture either way); a PUT always says it, so Remove is saved.
-      const { bulletin, ...withoutBulletin } = body;
-      const postBody =
-        bulletin == null || isBlankBulletin(bulletin) ? withoutBulletin : { ...body, bulletin: withoutNoPicture(bulletin) };
+      // A POST leaves out the Apostles' Creed switched on, too (the server
+      // stores none, which reads as it), so a POST sent before Affirmation
+      // PR B retries with the same body; a PUT always sends it, so switching
+      // a saved service back to the Apostles' Creed is saved (Affirmation PR
+      // B build review 1).
+      const { bulletin, affirmation, ...rest } = body;
+      const postBody = {
+        ...rest,
+        ...(bulletin == null || isBlankBulletin(bulletin) ? {} : { bulletin: withoutNoPicture(bulletin) }),
+        ...(affirmation == null || isTodaysAffirmation(affirmation) ? {} : { affirmation }),
+      };
 
       async function post(retried: boolean): Promise<ServiceOut> {
         autoUpdate((d) => keyForPost(d, fp));

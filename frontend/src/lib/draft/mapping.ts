@@ -22,7 +22,9 @@
  * the Apostles' Creed switched on (what every service printed before), so a
  * draft saved before the change stays "Saved" after the v5 migration; the
  * bodies sent always carry it (`serviceBody`), so a save never leaves an
- * older choice in place.
+ * older choice in place; only a POST leaves out the Apostles' Creed switched
+ * on, which the server stores as none (`useSaveService`; Affirmation PR B
+ * build review 1).
  */
 import type { ArchivedHymn, ServiceBulletin, ServiceOut } from "@/lib/api/types";
 import { isValidDateIso } from "@/lib/dates";
