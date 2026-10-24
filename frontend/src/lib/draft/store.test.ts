@@ -235,6 +235,33 @@ describe("DraftStore and the liturgy defaults (slice 4 spec, Draft store integra
     expect(store.getSnapshot().draft.liturgy.cards.benediction).toEqual({ enabled: true, text: DEFAULT_BENEDICTION_FALLBACK, origin: "default" });
   });
 
+  it("follows a new Affirmation default alone, the Benediction default unchanged, in an open builder (Affirmation PR B build review 2)", () => {
+    const { storage, data } = memoryStorage();
+    const t = clock();
+    const store = new DraftStore({
+      userId: USER_ID,
+      church: GRACE,
+      storage,
+      now: t.now,
+      liturgyDefaults: { defaultBenediction: DEFAULT_BENEDICTION_FALLBACK, defaultAffirmation: { choice: "apostles", text: "" } },
+    });
+    store.start();
+    expect(store.getSnapshot().draft.liturgy.affirmation).toEqual({ include: true, choice: "apostles", text: "", origin: "default" });
+    const before = store.getSnapshot().draft.updated_at;
+    t.advance(60_000);
+    // An admin chooses the Nicene Creed on Settings, Liturgy; only that default changed.
+    store.setLiturgyDefaults({ defaultBenediction: DEFAULT_BENEDICTION_FALLBACK, defaultAffirmation: { choice: "nicene", text: "" } });
+    const followed = store.getSnapshot().draft;
+    expect(followed.liturgy.affirmation).toEqual({ include: true, choice: "nicene", text: "", origin: "default" });
+    expect(followed.updated_at).toBe(new Date(Date.parse(before) + 1).toISOString());
+    // Own text with only the text changed follows too.
+    store.setLiturgyDefaults({ defaultBenediction: DEFAULT_BENEDICTION_FALLBACK, defaultAffirmation: { choice: "own", text: "We trust." } });
+    store.setLiturgyDefaults({ defaultBenediction: DEFAULT_BENEDICTION_FALLBACK, defaultAffirmation: { choice: "own", text: "We trust in God." } });
+    expect(store.getSnapshot().draft.liturgy.affirmation).toEqual({ include: true, choice: "own", text: "We trust in God.", origin: "default" });
+    vi.advanceTimersByTime(WRITE_DELAY_MS);
+    expect(stored(data).liturgy.affirmation.text).toBe("We trust in God.");
+  });
+
   it("loads a stored draft with today's default and the date's communion, stamped just after the stored draft", () => {
     const old = testDraft((d) => ({
       ...d,
