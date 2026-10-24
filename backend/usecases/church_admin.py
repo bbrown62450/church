@@ -15,7 +15,9 @@ import logging
 import re
 import uuid
 from collections.abc import Collection, Mapping
+from typing import Any
 
+import affirmation
 import liturgy_prompts
 import scripture_fetcher
 import service_rubric
@@ -51,8 +53,8 @@ def require_admin_role(role: str) -> None:
         raise Forbidden(ADMINS_ONLY_MESSAGE)
 
 
-def clean_profile_patch(changes: Mapping[str, str], *, translations: Collection[str],
-                        church_hymnals: Collection[str]) -> tuple[dict[str, str], dict[str, str]]:
+def clean_profile_patch(changes: Mapping[str, Any], *, translations: Collection[str],
+                        church_hymnals: Collection[str]) -> tuple[dict[str, str], dict[str, Any]]:
     """PATCH /church's provided fields, cleaned and checked (pure).
 
     `changes` holds only the fields sent (a null is not sent). The checks run
@@ -70,10 +72,13 @@ def clean_profile_patch(changes: Mapping[str, str], *, translations: Collection[
     ends become "\\n", a vertical tab or form feed a line break, and NUL, the
     other C0 controls, U+FFFE and U+FFFF go; 6a-1 code review m3) and
     trimmed, and "" is kept (the church then has no default Benediction).
+    The default Affirmation of Faith (affirmation spec) is stored as {choice,
+    text}: the text cleaned as the Benediction's and kept only for "own",
+    which needs one (InvalidInput on default_affirmation.text).
     Returns (columns, settings_patch).
     """
     columns: dict[str, str] = {}
-    settings: dict[str, str] = {}
+    settings: dict[str, Any] = {}
     if "name" in changes:
         columns["name"] = changes["name"].strip()
         if not columns["name"]:
@@ -98,10 +103,16 @@ def clean_profile_patch(changes: Mapping[str, str], *, translations: Collection[
         settings["default_hymnal"] = wanted if wanted in matches else matches[0]
     if "default_benediction" in changes:
         settings["default_benediction"] = archive._xml_safe(changes["default_benediction"]).strip()
+    if "default_affirmation" in changes:
+        wanted = changes["default_affirmation"]
+        text = archive._xml_safe(wanted["text"]).strip() if wanted["choice"] == "own" else ""
+        if wanted["choice"] == "own" and not text:
+            raise InvalidInput(affirmation.OWN_TEXT_REQUIRED, field="default_affirmation.text")
+        settings[affirmation.SETTINGS_KEY] = {"choice": wanted["choice"], "text": text}
     return columns, settings
 
 
-def update_profile(church_id: uuid.UUID, actor_id: uuid.UUID, changes: Mapping[str, str]) -> dict:
+def update_profile(church_id: uuid.UUID, actor_id: uuid.UUID, changes: Mapping[str, Any]) -> dict:
     """PATCH /church (6a spec, Semantics): write the provided fields, all or
     nothing, in one transaction under the church-row lock, with the caller's
     role re-read under it. Returns {"name", "role"}: the name as stored and

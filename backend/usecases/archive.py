@@ -52,6 +52,12 @@ from before PR 3b) keeps the saved picture. The picture is held (FOR SHARE)
 until the save commits, so the 60-day removal cannot take it meanwhile
 (repos.bulletin_images, plan review I5).
 
+The affirmation spec adds the Affirmation of Faith (affirmation.py):
+clean_input makes its own text Word-safe and trims it; a save stores it in
+services.affirmation, a POST without it stores NULL and a PUT without it
+keeps the saved one (the bulletin's rule); opening reads it tolerantly
+(NULL is the Apostles' Creed, included, as every service printed before).
+
 No FastAPI, Starlette or Streamlit here (test_no_streamlit_in_core.py).
 """
 from __future__ import annotations
@@ -65,6 +71,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Optional
 
+import affirmation as af
 from db import session_scope
 from db.ids import as_uuid
 from domain_errors import Conflict, InvalidInput, NotFound
@@ -115,6 +122,7 @@ class ServiceInput:
     include_communion: bool = False
     custom_elements: tuple[CustomElement, ...] = ()
     bulletin: Optional[ServiceBulletin] = None   # None: not sent (a client from before printed bulletin PR 2b)
+    affirmation: Optional[af.Affirmation] = None  # None: not sent (a client from before the affirmation spec)
 
 
 def clean_input(data: ServiceInput) -> ServiceInput:
@@ -142,6 +150,7 @@ def clean_input(data: ServiceInput) -> ServiceInput:
         custom_elements=tuple(CustomElement(clean(e.label), clean(e.text), e.insert_after)
                               for e in data.custom_elements),
         bulletin=None if data.bulletin is None else data.bulletin.map_texts(clean),
+        affirmation=None if data.affirmation is None else replace(data.affirmation, text=clean(data.affirmation.text)),
     )
 
 
@@ -206,6 +215,7 @@ class ServiceRecord:
     include_communion: bool
     custom_elements: list[CustomElement]
     bulletin: dict                              # service_bulletin's stored shape; empty when none was saved
+    affirmation: dict                           # affirmation.Affirmation.to_json(); the default when none was saved
     created_by: Optional[Author]
     saved_at: str                               # ISO 8601 in UTC, "+00:00"
 
@@ -295,6 +305,8 @@ def _fields(church_id: uuid.UUID, clean: ServiceInput, hymns: Mapping[str, Optio
                             for e in clean.custom_elements],
         # Not sent: a POST stores NULL and a PUT leaves the column as it is (a saved one comes as _kept_bulletin).
         **({} if clean.bulletin is None else {"bulletin": clean.bulletin.to_json()}),
+        # Not sent (a page from before the affirmation spec): a POST stores NULL, a PUT keeps the saved one.
+        **({} if clean.affirmation is None else {"affirmation": clean.affirmation.to_json()}),
         "saved_at": datetime.datetime.now(datetime.timezone.utc),
     }
 
@@ -388,6 +400,7 @@ def _record(session, church_id: uuid.UUID, row) -> ServiceRecord:
         include_communion=bool(row.include_communion),
         custom_elements=_archived_custom_elements(row.custom_elements),
         bulletin=read_bulletin(row.bulletin).to_json(),
+        affirmation=af.read(row.affirmation).to_json(),
         created_by=None if found is None else _author(*found),
         saved_at=saved_at_text(row.saved_at),
     )

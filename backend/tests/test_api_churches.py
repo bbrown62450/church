@@ -90,6 +90,7 @@ def test_create_201_listed_in_me_and_usable(client, seed_catalog):
         "effective_translation": "web", "effective_translation_label": "World English Bible (WEB)",
         "default_hymnal": None, "effective_hymnal": "GG2013",  # slice 3: the seeded catalog is GG2013
         "default_benediction": DEFAULT_BENEDICTION_FALLBACK,   # slice 4: the full Halverson text
+        "default_affirmation": {"choice": "apostles", "text": ""},   # the affirmation spec
     }
     with session_scope() as s:
         assert s.get(Church, church_id).timezone == "America/Chicago"

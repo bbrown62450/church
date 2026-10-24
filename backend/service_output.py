@@ -30,6 +30,7 @@ from typing import Literal, Optional
 from urllib.parse import quote
 
 import scripture_refs
+from affirmation import Affirmation
 
 MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September",
           "October", "November", "December")
@@ -117,6 +118,7 @@ class ResolvedService:
     selected_nt_ref: str = ""
     include_communion: bool = False
     custom_elements: tuple[CustomElement, ...] = ()
+    affirmation: Affirmation = Affirmation()        # the affirmation spec; the default prints as before it
 
 
 def render_docx(resolved: ResolvedService, variant: Variant) -> bytes:
@@ -136,6 +138,7 @@ def render_docx(resolved: ResolvedService, variant: Variant) -> bytes:
         nt_ref=nt,
         sermon_title=resolved.sermon_title,
         include_communion=resolved.include_communion,
+        affirmation=resolved.affirmation,
         custom_elements=[{"label": e.label, "text": e.text, "insert_after": e.insert_after}
                          for e in resolved.custom_elements],
         **VARIANTS[variant],

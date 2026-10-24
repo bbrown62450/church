@@ -201,6 +201,10 @@ class Service(Base):
     # (every service saved before PR 2b), read as an empty bulletin. A Python
     # None is stored as SQL NULL, never as the JSON value null.
     bulletin = Column(JSON(none_as_null=True), nullable=True)
+    # Revision 0010_services_affirmation (the affirmation spec): {include,
+    # choice, text}. NULL: saved before it (or a POST without one), read as
+    # the Apostles' Creed, included.
+    affirmation = Column(JSON(none_as_null=True), nullable=True)
 
     __table_args__ = (
         Index("ix_services_church_saved_at", "church_id", "saved_at"),

@@ -15,6 +15,7 @@ function.
 import uuid
 from dataclasses import dataclass
 
+import affirmation
 import scripture_fetcher
 from db import session_scope
 from liturgy_config import resolve_default_benediction
@@ -39,6 +40,7 @@ class ChurchProfile:
     default_hymnal: str | None           # slice 3: settings["default_hymnal"], when a non-blank string
     effective_hymnal: str | None         # slice 3: the hymnal the builder opens (GET /hymnals agrees)
     default_benediction: str             # slice 4: resolve_default_benediction (full Halverson text by default)
+    default_affirmation: dict            # the affirmation spec: {choice, text}, the Apostles' Creed by default
 
 
 def get_church_profile(church_id: uuid.UUID) -> ChurchProfile:
@@ -56,6 +58,8 @@ def get_church_profile(church_id: uuid.UUID) -> ChurchProfile:
     - default_benediction: liturgy_config.resolve_default_benediction(settings)
       ("" is kept: a church with no default; slice 4). Unset, non-string or
       the shorthand "Halverson" is the full Halverson text (owner, 2026-10-02).
+    - default_affirmation: affirmation.resolve_default(settings) as {choice,
+      text}: the Apostles' Creed when unset or not understood.
 
     Raises Forbidden (403 forbidden, details.reason no_church_access) when the
     church is missing or soft-deleted.
@@ -80,4 +84,6 @@ def get_church_profile(church_id: uuid.UUID) -> ChurchProfile:
         default_hymnal=hymnals.default_hymnal,
         effective_hymnal=hymnals.effective_hymnal,
         default_benediction=resolve_default_benediction(church["settings"]),
+        default_affirmation={k: v for k, v in affirmation.resolve_default(church["settings"]).to_json().items()
+                             if k != "include"},
     )

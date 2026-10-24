@@ -76,16 +76,17 @@ from db.schema_check import (
     schema_diff,
 )
 
-EXPECTED_HEAD = "0009_memberships_one_owner"
+EXPECTED_HEAD = "0010_services_affirmation"
 # What a database stamped at 0001_baseline lacks (runbook step 6, sorted):
 # 0004's invites changes, then 0005's and 0006's services changes (slice 5a-2,
 # printed bulletin PR 2b), then 0007's table (printed bulletin PR 3a), then
 # 0008's removed constraint (slice 6b-1; SQLite reflects no expression index,
 # so its new uq_invites_pending_email is not listed here; Postgres lists it),
-# then 0009's index (slice 6b-2a).
+# then 0009's index (slice 6b-2a), then 0010's services column (the affirmation spec).
 BASELINE_DRIFT = [
     "add_column invites.accepted_by",
     "add_column invites.reusable",
+    "add_column services.affirmation",
     "add_column services.bulletin",
     "add_column services.custom_elements",
     "add_column services.hymnal",
@@ -126,7 +127,7 @@ def _load_schema_drift():
     return module
 
 
-def test_head_is_0009_memberships_one_owner():
+def test_head_is_0010_services_affirmation():
     script = ScriptDirectory.from_config(alembic_config(configure_logger=False))
     assert script.get_current_head() == EXPECTED_HEAD
 
@@ -160,7 +161,7 @@ def test_an_unknown_revision_is_ahead(tmp_path):
     assert _state_of(url) == RevisionState("0005_from_the_future", EXPECTED_HEAD, "ahead")
 
 
-def test_schema_diff_at_baseline_lists_exactly_the_0004_to_0009_changes(tmp_path):
+def test_schema_diff_at_baseline_lists_exactly_the_0004_to_0010_changes(tmp_path):
     """0001_baseline stands in for production after `alembic stamp 0001_baseline`."""
     url = _sqlite_file_url(tmp_path)
     _upgrade_to(url, "0001_baseline")

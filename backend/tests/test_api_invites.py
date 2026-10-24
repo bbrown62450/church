@@ -208,6 +208,7 @@ def test_after_accept_get_church_200(world):
         "effective_translation": "web", "effective_translation_label": "World English Bible (WEB)",
         "default_hymnal": None, "effective_hymnal": None,     # slice 3: no hymns in this church
         "default_benediction": DEFAULT_BENEDICTION_FALLBACK,  # slice 4: the full Halverson text
+        "default_affirmation": {"choice": "apostles", "text": ""},  # the affirmation spec
     }
 
 

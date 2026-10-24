@@ -14,6 +14,7 @@ from collections.abc import Mapping, Sequence
 from typing import Dict, Any, List, Optional
 from io import BytesIO
 
+from affirmation import CHOICE_LABELS, Affirmation
 from liturgy_config import ASSURANCE_RESPONSE, COMMUNION_BLOCKS
 from service_output import hymn_line
 
@@ -138,6 +139,7 @@ def build_docx(
     include_prayers_of_the_people: bool = True,
     include_communion: bool = False,
     custom_elements: Sequence[Mapping[str, Any]] = (),
+    affirmation: Optional[Affirmation] = None,
 ) -> bytes:
     """
     The Word file of a service: Streamlit's layout, paragraph for paragraph
@@ -153,6 +155,9 @@ def build_docx(
     Both variants include the sermon title; only the pastor's copy includes
     Prayers of the People (service_output.VARIANTS). Custom elements print
     after their anchor, which is emitted even when its item is absent.
+    The Affirmation of Faith (affirmation spec; None is the Apostles' Creed,
+    as before) prints the creed's name, or own text as typed, and nothing
+    when switched off or own text is blank.
     Returns the .docx bytes.
     """
     if not Document:
@@ -239,10 +244,12 @@ def build_docx(
         doc.add_paragraph()
     _add_custom_elements_after(doc, "sermon", custom)
 
-    # 10. Affirmation of Faith
-    doc.add_paragraph("Affirmation of Faith", style="Heading 2")
-    doc.add_paragraph("Apostles' Creed")
-    doc.add_paragraph()
+    # 10. Affirmation of Faith (the affirmation spec: off or blank own text prints nothing)
+    faith = affirmation or Affirmation()
+    if faith.prints():
+        doc.add_paragraph("Affirmation of Faith", style="Heading 2")
+        doc.add_paragraph(faith.text if faith.choice == "own" else CHOICE_LABELS[faith.choice])
+        doc.add_paragraph()
     _add_custom_elements_after(doc, "affirmation_of_faith", custom)
 
     # 11. Second Hymn (the response slot)

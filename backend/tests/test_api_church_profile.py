@@ -62,6 +62,7 @@ def test_new_fields_including_label(client, make_user, make_church, no_esv_key):
         "default_hymnal": None,
         "effective_hymnal": None,
         "default_benediction": HALVERSON,
+        "default_affirmation": {"choice": "apostles", "text": ""},
     }
 
 
@@ -137,7 +138,7 @@ def test_me_church_items_unchanged(client, make_user, make_church):
     assert set(components["ChurchProfileOut"]["required"]) == {
         "id", "name", "role", "timezone", "timezone_valid", "bible_translation",
         "effective_translation", "effective_translation_label", "default_hymnal", "effective_hymnal",
-        "default_benediction"}
+        "default_benediction", "default_affirmation"}
 
 
 def test_church_deleted_after_guard_is_403(client, make_user, make_church, monkeypatch):

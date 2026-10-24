@@ -864,6 +864,29 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AffirmationChoiceOut */
+        AffirmationChoiceOut: {
+            /** Credit */
+            credit: string;
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "apostles" | "nicene" | "own";
+            /** Label */
+            label: string;
+            /** Text */
+            text: string;
+        };
+        /** AffirmationConfigOut */
+        AffirmationConfigOut: {
+            /** Choices */
+            choices: components["schemas"]["AffirmationChoiceOut"][];
+            /** Title */
+            title: string;
+            /** Toggle Label */
+            toggle_label: string;
+        };
         /**
          * ArchivedHymn
          * @description A saved slot's hymn. in_hymnal: the hymn is in the church's hymnal now
@@ -1034,6 +1057,20 @@ export interface components {
              */
             section: "call_to_worship" | "opening_prayer" | "prayer_of_confession" | "assurance" | "prayer_for_illumination" | "prayers_of_the_people" | "offertory_prayer" | "benediction";
         };
+        /**
+         * ChurchAffirmation
+         * @description The church's default Affirmation of Faith (affirmation spec; GET and
+         *     PATCH /church): the choice and, for "own", the church's own text.
+         */
+        ChurchAffirmation: {
+            /**
+             * Choice
+             * @enum {string}
+             */
+            choice: "apostles" | "nicene" | "own";
+            /** Text */
+            text: string;
+        };
         /** ChurchOut */
         ChurchOut: {
             /**
@@ -1057,6 +1094,7 @@ export interface components {
         ChurchPatchIn: {
             /** Bible Translation */
             bible_translation?: string | null;
+            default_affirmation?: components["schemas"]["ChurchAffirmation"] | null;
             /** Default Benediction */
             default_benediction?: string | null;
             /** Default Hymnal */
@@ -1074,6 +1112,7 @@ export interface components {
         ChurchProfileOut: {
             /** Bible Translation */
             bible_translation: string | null;
+            default_affirmation: components["schemas"]["ChurchAffirmation"];
             /** Default Benediction */
             default_benediction: string;
             /** Default Hymnal */
@@ -1725,6 +1764,7 @@ export interface components {
         };
         /** LiturgyConfigOut */
         LiturgyConfigOut: {
+            affirmation: components["schemas"]["AffirmationConfigOut"];
             /** Ai Available */
             ai_available: boolean;
             /** Assurance Response */
@@ -2326,6 +2366,23 @@ export interface components {
             text: string;
         };
         /**
+         * ServiceAffirmation
+         * @description The Affirmation of Faith of one service (affirmation spec): switched on
+         *     or off, the choice, and the own text ("" unless the choice is "own"; the
+         *     server reads it so). Sent and answered alike.
+         */
+        ServiceAffirmation: {
+            /**
+             * Choice
+             * @enum {string}
+             */
+            choice: "apostles" | "nicene" | "own";
+            /** Include */
+            include: boolean;
+            /** Text */
+            text: string;
+        };
+        /**
          * ServiceBulletin
          * @description The printed bulletin's weekly fields (PR 2b), every field present. Texts
          *     are not checked for line breaks: the server reads them tolerantly
@@ -2358,6 +2415,7 @@ export interface components {
          *     keeps the saved one.
          */
         ServiceDraft: {
+            affirmation?: components["schemas"]["ServiceAffirmation"] | null;
             bulletin?: components["schemas"]["ServiceBulletin"] | null;
             /** Custom Elements */
             custom_elements?: components["schemas"]["CustomElementIn"][];
@@ -2406,6 +2464,7 @@ export interface components {
          * @description A saved service as the builder opens it (GET, POST and PUT /services).
          */
         ServiceOut: {
+            affirmation: components["schemas"]["ServiceAffirmation"];
             bulletin: components["schemas"]["ServiceBulletin"];
             created_by: components["schemas"]["AuthorOut"] | null;
             /** Custom Elements */

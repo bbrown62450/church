@@ -40,6 +40,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from typing import Literal, Optional
 
+import affirmation as af
+from affirmation import APOSTLES_CREED  # noqa: F401 (printed_bulletin.APOSTLES_CREED, as before)
 from bulletin_settings import GLORIA_PATRI, BulletinSettings
 from liturgy_config import ASSURANCE_RESPONSE, COMMUNION_BLOCKS
 from service_bulletin import Announcements, Music, ServiceBulletin
@@ -68,15 +70,6 @@ TEXT_UNAVAILABLE = "[Reading text unavailable]"
 
 # The header's people, as "{name}, Worship Leader" (bulletin_settings.ROLES order).
 ROLE_TITLES = {"worship_leader": "Worship Leader", "liturgist": "Liturgist", "organist": "Organist"}
-
-APOSTLES_CREED = (
-    "I believe in God, the Father almighty, Maker of heaven and earth, and in Jesus Christ his only "
-    "Son, our Lord; who was conceived by the Holy Ghost, born of the Virgin Mary, suffered under "
-    "Pontius Pilate, was crucified, dead, and buried; he descended into hell; the third day he rose "
-    "again from the dead; he ascended into heaven, and sitteth on the right hand of God the Father "
-    "Almighty; from thence he shall come to judge the quick and the dead. I believe in the Holy "
-    "Ghost; the holy catholic church; the communion of saints; the forgiveness of sins; the "
-    "resurrection of the body; and the life everlasting. Amen.")
 
 Style = Literal["header", "element", "section", "body", "bold", "hanging", "indent", "note", "credit",
                 "title", "box", "contact", "center"]
@@ -265,6 +258,25 @@ def _communion(s: BulletinSettings) -> list[Line]:
     return lines
 
 
+def _affirmation(s: BulletinSettings, a: af.Affirmation) -> list[Line]:
+    """The Affirmation of Faith (affirmation spec): nothing when switched off
+    or own text left blank; a creed's title and its text in bold (the Nicene
+    Creed one paragraph per sense line, each with a hanging indent so a line
+    that wraps reads as one line, then ELLC's credit line); own text as typed,
+    in bold. The Apostles' Creed prints exactly as before the change."""
+    if not a.prints():
+        return []
+    if a.choice == "own":
+        return [_element(s, "affirmation_of_faith", "Affirmation of Faith:"), Line("bold", (Span(a.text, bold=True),))]
+    text = af.CREED_TEXT[a.choice]
+    words = ([Line("bold", (Span(text, bold=True),))] if "\n" not in text
+             else [Line("hanging", (Span(sense, bold=True),)) for sense in text.split("\n")])
+    lines = [_element(s, "affirmation_of_faith", "Affirmation of Faith:", Span("  "),
+                      Span(af.PRINTED_TITLE[a.choice], bold=True)), *words]
+    credit = af.CREED_CREDIT[a.choice]
+    return [*lines, Line("credit", (Span(credit, italic=True),))] if credit else lines
+
+
 def _section(title: str) -> Line:
     return Line("section", (Span(title, bold=True, italic=True),))
 
@@ -334,9 +346,7 @@ def order_of_worship(ps: PrintedService) -> list[Line]:
     lines += _custom(s, "nt_reading", r)
     lines.append(_element(s, "sermon", "Sermon:", Span("  "), _quoted(sermon)))
     lines += _custom(s, "sermon", r)
-    lines += [_element(s, "affirmation_of_faith", "Affirmation of Faith:", Span("  "),
-                       Span("“The Apostles’ Creed”", bold=True)),
-              Line("bold", (Span(APOSTLES_CREED, bold=True),))]
+    lines += _affirmation(s, r.affirmation)
     lines += _custom(s, "affirmation_of_faith", r)
     lines += _hymn(s, "second_hymn", hymns.get("response"))
     lines += _custom(s, "second_hymn", r)

@@ -26,7 +26,7 @@ fails its deploy health check.
   `SET LOCAL statement_timeout = '60s'`, and all pending revisions run in one
   transaction, so any failure rolls every one of them back.
 - Revisions live in `migrations/versions/`, one file per revision, named
-  `NNNN_short_slug.py`. Head is `0009_memberships_one_owner`.
+  `NNNN_short_slug.py`. Head is `0010_services_affirmation`.
 
 | Revision | What it does |
 |---|---|
@@ -39,6 +39,7 @@ fails its deploy health check.
 | `0007_bulletin_images` | Printed bulletin PR 3a: the table `bulletin_images` (the cover pictures, stored as JPEG in `bytes`) with the index `ix_bulletin_images_church_created`, and on Postgres row-level security on it and, when Supabase's `anon` and `authenticated` roles exist, `REVOKE ALL` on it from both. No other table changes. Before it reaches production: "Before 0007_bulletin_images" below. |
 | `0008_invites_integrity` | Slice 6b-1: an invite whose role is neither `member` nor `admin` becomes an `admin` invite and is revoked; then, unless two pending invites of one church share an email in any capitalization (it refuses, naming the churches: "Church integrity" below), the unique constraint `uq_invites_church_email` is replaced by the partial unique index `uq_invites_pending_email` on `(church_id, lower(email))` for pending email invites, and the check `ck_invites_role` (`member` or `admin`) is added. No column changes. Before it reaches production: "Before 0008_invites_integrity" below. |
 | `0009_memberships_one_owner` | Slice 6b-2a: unless a church has more than one owner (it refuses, naming the churches: "Church integrity" below), the partial unique index `uq_memberships_one_owner` on `memberships (church_id)` `WHERE role = 'owner'`: the database refuses a second owner. No column or data changes. Before it reaches production: "Before 0009_memberships_one_owner" below. |
+| `0010_services_affirmation` | The Affirmation of Faith: `services.affirmation` (JSON), nullable with no default and no backfill: the service's Affirmation of Faith (`{include, choice, text}`); NULL reads as the Apostles' Creed, included, as every service printed before. Before it reaches production: "Before 0010_services_affirmation" below. |
 
 ## Rules for a new revision
 
@@ -1092,6 +1093,117 @@ git rm -q -f streamlit_tests/test_settings_members_invites.py
 
 Run the backend suite before the revert's PR opens; it must pass. Never
 `alembic downgrade` production for this.
+
+## Before 0010_services_affirmation (Affirmation of Faith)
+
+Railway's Pre-deploy Command (`alembic upgrade head`) applies
+`0010_services_affirmation` when Affirmation PR A (the server side of the
+Affirmation of Faith; the pages are PR B, merged after it) merges. First,
+the same routine as 0006: a backup, read-only counts of the saved services,
+and a look at the SQL; after the deploy, one read-only check. One step at a
+time. Nothing here changes data. The agent guides the owner and records the
+results in `docs/ops-runbook.md` → "Affirmation PR A record", never with
+an email address, a church id or a database URL.
+
+### Step 1: Backup
+
+Actions → db-backup → Run workflow (branch `main`), or
+`gh workflow run db-backup --ref main`. It must finish green with an
+artifact `db-backup`. Record the run URL.
+
+### Step 2: Count the saved services (read-only)
+
+Supabase → the project → SQL Editor → New query. Paste this and Run:
+
+```sql
+-- Read-only: what the archive holds before 0010. Changes nothing.
+SELECT (SELECT version_num FROM alembic_version) AS version,
+       count(*) AS services,
+       count(DISTINCT church_id) AS churches
+FROM services;
+```
+
+One row. Expected before the merge: `version` is `0009_memberships_one_owner`
+(anything else: stop); `services` is the number of saved services in all
+churches and `churches` the number of churches that saved at least one.
+
+### Step 3: Read the SQL the upgrade will run
+
+**Read only. Do not run this.** It is the SQL Railway runs when the PR
+merges, shown here so the owner can read it; pasting it into the SQL
+Editor would change the database. The agent renders it from the PR's code
+without connecting to any database (from `backend/`):
+
+```bash
+DATABASE_URL=postgresql://preview@localhost:1/preview ../.venv/bin/alembic upgrade 0009_memberships_one_owner:0010_services_affirmation --sql 2>/dev/null | grep -v -e '^--' -e '^$' | sed 's/ *$//'
+```
+
+Expected, exactly and in full (`backend/tests/test_migrations.py` pins it).
+In the chat the agent does not paste it: it says in plain words what it
+does and points to this step.
+
+```
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+ALTER TABLE services ADD COLUMN affirmation JSON;
+UPDATE alembic_version SET version_num='0010_services_affirmation' WHERE alembic_version.version_num = '0009_memberships_one_owner';
+COMMIT;
+```
+
+One new empty column, in one transaction: no row is copied, changed or
+deleted. If another connection holds a lock on `services` for more than
+5 s, the deploy fails and the previous release keeps serving; run the
+deploy again.
+
+### Step 4: After the deploy (read-only)
+
+First the owner opens Railway → the API service → the merge commit's
+deployment → Deploy Logs and looks for the pre-deploy command's line:
+
+```
+INFO  [alembic.runtime.migration] Running upgrade 0009_memberships_one_owner -> 0010_services_affirmation, Services: the Affirmation of Faith (affirmation spec, "Data shape")
+```
+
+Then the agent checks that the new API is the one serving: `/health/ready`
+says only that the API and the database answer, so the agent fetches the API's
+published schema (`/openapi.json` on the API's address, no sign-in) and
+looks for `"ServiceAffirmation"` in it (the API from before this PR has
+none).
+
+Then the SQL Editor (it only reads):
+
+```sql
+-- Read-only: is 0010 applied? Changes nothing.
+-- Before 0010 is applied it still runs: 0009_memberships_one_owner, 0, 0.
+SELECT (SELECT version_num FROM alembic_version) AS version,
+       (SELECT count(*) FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'services'
+           AND column_name = 'affirmation') AS new_column,
+       (SELECT count(*) FROM services AS s
+         WHERE to_jsonb(s) ->> 'affirmation' IS NOT NULL) AS with_affirmation;
+```
+
+Expected: `0010_services_affirmation`, `1`, `0`. (`with_affirmation` stays
+`0` until the Affirmation of Faith pages, PR B, are live: the pages from
+before them never send one.) `0009_memberships_one_owner`, `0`, `0` means
+the deploy has not applied 0010 yet: wait a minute and run it again. Then
+step 2's query again: the same `services` and `churches` (or more, by the
+services saved since the deploy; never fewer).
+
+### Reverting Affirmation PR A
+
+If PR B (the pages) is merged, revert it first: its pages send
+`affirmation`, which the API from before PR A refuses. The schema stays at
+`0010_services_affirmation`: the column is nullable and the code before
+this PR ignores it. Revert the merge commit, then restore
+`backend/migrations/versions/0010_services_affirmation.py`, the `Service`
+column in `backend/db/models.py`, this README and
+`backend/tests/test_migrations.py` from the merge commit in the same PR, so
+Railway's `alembic upgrade head` still finds the database at head and
+`alembic check` stays clean. Never `alembic downgrade` production for this:
+the choices saved since the merge stay in the column, unread (every service
+then prints the Apostles' Creed again), and come back when the PR does.
 
 ## Church integrity (slice 6b)
 
