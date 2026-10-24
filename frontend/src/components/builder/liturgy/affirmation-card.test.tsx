@@ -123,7 +123,7 @@ describe("the Affirmation of Faith card (affirmation spec)", () => {
     await waitFor(() => expect(stored().liturgy.affirmation).toEqual({ include: true, choice: "apostles", text: "", origin: "default" }));
   });
 
-  it("follows a church whose default is its own text, and says so for a saved service", async () => {
+  it("follows a church whose default is its own text", async () => {
     const own = churchProfile({ default_affirmation: { choice: "own", text: OWN } });
     renderStep(testDraft(), { "GET /church": own });
     const region = await card();
