@@ -17,6 +17,12 @@
  * `bulletin` (`bulletinPayload`) only when something is filled in, so a
  * draft saved before PR 2b keeps its fingerprint and stays "Saved" after the
  * draft v3 migration; the bodies sent always carry it (`serviceBody`).
+ *
+ * The affirmation spec: the payload holds `affirmation` only when it is not
+ * the Apostles' Creed switched on (what every service printed before), so a
+ * draft saved before the change stays "Saved" after the v5 migration; the
+ * bodies sent always carry it (`serviceBody`), so a save never leaves an
+ * older choice in place.
  */
 import type { ArchivedHymn, ServiceBulletin, ServiceOut } from "@/lib/api/types";
 import { isValidDateIso } from "@/lib/dates";
@@ -30,6 +36,8 @@ import {
   freshDraft,
   SECTION_KEYS,
   SLOTS,
+  type AffirmationChoice,
+  type DraftAffirmation,
   type DraftChurch,
   type DraftV1,
   type HymnPick,
@@ -56,7 +64,19 @@ export type ServiceDraftPayload = {
   hymnal: string | null;
   /** The Bulletin step's fields (printed bulletin PR 2b); left out when nothing is filled in. */
   bulletin?: ServiceBulletin;
+  /** The Affirmation of Faith (affirmation spec); left out when it is the Apostles' Creed, switched on. */
+  affirmation?: AffirmationPayload;
 };
+
+/** The API's `ServiceAffirmation`. */
+export type AffirmationPayload = { include: boolean; choice: AffirmationChoice; text: string };
+/** What a service prints when it says nothing: the Apostles' Creed, switched on. */
+export const TODAYS_AFFIRMATION: AffirmationPayload = { include: true, choice: "apostles", text: "" };
+
+/** The card as sent: the own text trimmed, and only for "own". */
+export function affirmationPayload(a: DraftAffirmation): AffirmationPayload {
+  return { include: a.include, choice: a.choice, text: a.choice === "own" ? a.text.trim() : "" };
+}
 
 function hymnRef(pick: HymnPick | null): HymnRefPayload | null {
   return pick ? { hymn_id: pick.hymn_id, title: pick.title, number: pick.number, hymnal: pick.hymnal } : null;
@@ -74,6 +94,8 @@ function hymnRef(pick: HymnPick | null): HymnRefPayload | null {
 export function draftToServicePayload(draft: DraftV1): ServiceDraftPayload {
   const picks = effectivePicks(draft);
   const bulletin = bulletinPayload(draft);
+  const affirmation = affirmationPayload(draft.liturgy.affirmation);
+  const today = affirmation.include && affirmation.choice === "apostles";
   const liturgy: Partial<Record<SectionKey, string>> = {};
   for (const key of SECTION_KEYS) {
     const card = draft.liturgy.cards[key];
@@ -98,6 +120,7 @@ export function draftToServicePayload(draft: DraftV1): ServiceDraftPayload {
       .map(({ label, text, insert_after }) => ({ label: label.trim(), text: text.trim(), insert_after })),
     hymnal: draft.hymns.hymnal,
     ...(isBlankBulletin(bulletin) ? {} : { bulletin }),
+    ...(today ? {} : { affirmation }),
   };
 }
 
@@ -171,6 +194,8 @@ export function serviceToDraft(
         text: element.text,
         insert_after: normalizePlacement(element.insert_after),
       })),
+      // A server from before the affirmation spec (only if it were reverted) sends none: the Apostles' Creed.
+      affirmation: { ...(service.affirmation ?? TODAYS_AFFIRMATION), origin: "archive" },
     },
     // A server from before PR 2b-1 (only if it were reverted) sends none.
     bulletin: bulletinFromService(service.bulletin ?? emptyServiceBulletin(), service),
@@ -183,9 +208,10 @@ export function serviceToDraft(
  * `saved_at` and date), `saved_fingerprint` is the payload that was sent, and
  * what followed a default is now the service's own, as when a saved service
  * is opened (owner answer 4): a Benediction following the church default
- * keeps its text with origin "archive" ("empty" when it is blank), and
+ * keeps its text with origin "archive" ("empty" when it is blank),
  * communion following the first-Sunday rule keeps its setting with origin
- * "archive". Neither changes the payload, so the draft is "Saved".
+ * "archive", and so does an Affirmation of Faith following the church
+ * default (affirmation spec). None changes the payload, so the draft is "Saved".
  */
 export function markSaved(d: DraftV1, service: ServiceOut, fp: string): DraftV1 {
   const benediction = d.liturgy.cards.benediction;
@@ -194,11 +220,13 @@ export function markSaved(d: DraftV1, service: ServiceOut, fp: string): DraftV1 
       ? { ...d.liturgy.cards, benediction: { ...benediction, origin: benediction.text.trim() === "" ? ("empty" as const) : ("archive" as const) } }
       : d.liturgy.cards;
   const communion_origin = d.liturgy.communion_origin === "default" ? "archive" : d.liturgy.communion_origin;
+  const affirmation =
+    d.liturgy.affirmation.origin === "default" ? { ...d.liturgy.affirmation, origin: "archive" as const } : d.liturgy.affirmation;
   return {
     ...d,
     editing: { service_id: service.id, saved_at: service.saved_at, date_iso: service.service_date_iso },
     saved_fingerprint: fp,
-    liturgy: { ...d.liturgy, cards, communion_origin },
+    liturgy: { ...d.liturgy, cards, communion_origin, affirmation },
     // Saved as a different service (a POST): what "Save as new service" set
     // aside belongs to the other one (PR 2b-2). Saved over the same service
     // (a PUT), it is kept, so it returns on the saved date rather than being

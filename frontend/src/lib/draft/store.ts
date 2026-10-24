@@ -248,7 +248,14 @@ export class DraftStore {
 
   /** The church's defaults changed (a profile refetch): an automatic change for a card still following them. */
   setLiturgyDefaults = (next: LiturgyDefaults): void => {
-    if (this.defaults?.defaultBenediction === next.defaultBenediction) return;
+    const same = this.defaults?.defaultAffirmation;
+    if (
+      this.defaults?.defaultBenediction === next.defaultBenediction &&
+      same?.choice === next.defaultAffirmation?.choice &&
+      same?.text === next.defaultAffirmation?.text
+    ) {
+      return;
+    }
     this.defaults = next;
     this.autoUpdate((d) => d);
   };

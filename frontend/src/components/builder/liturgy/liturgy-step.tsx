@@ -23,6 +23,7 @@ import { useLiturgyConfig } from "@/lib/queries/liturgy";
 import { useUndoToasts } from "../hymns/use-undo-toasts";
 
 import { AddCustomElementDialog } from "./add-custom-element-dialog";
+import { AffirmationCard } from "./affirmation-card";
 import { AiBar } from "./ai-bar";
 import { CommunionCard } from "./communion-card";
 import { CustomElementCard } from "./custom-element-card";
@@ -49,7 +50,9 @@ function LiturgySkeleton() {
  * Step 3, Liturgy (slice 4 spec, "User experience"): the sermon title, then
  * the order of worship from `GET /liturgy/config`'s outline, in the order the
  * Word files print it: a card for each section, muted landmark rows for the
- * hymns, readings, sermon and creed, the communion card after the Second
+ * hymns, readings and sermon, the Affirmation of Faith card in the
+ * Affirmation's place after the Sermon Title (affirmation spec; its muted
+ * row when the API sends no card data), the communion card after the Second
  * Hymn, and each custom element right after the item that owns its place (an
  * unknown place reads as the end), then "Add custom element" (at most 30,
  * checked again on Add against the latest draft, since another tab may have
@@ -212,6 +215,12 @@ export function LiturgyStep() {
                       maxLength={config.limits.max_section_text}
                       aiAvailable={config.ai_available}
                     />
+                  </li>
+                ) : item.key === "affirmation_of_faith" && config.affirmation ? (
+                  // The affirmation spec: the card in the Affirmation's place. An API from before it sends no
+                  // card data, and the row stays as it was.
+                  <li>
+                    <AffirmationCard config={config.affirmation} maxLength={config.limits.max_section_text} />
                   </li>
                 ) : item.kind === "landmark" ? (
                   <li>

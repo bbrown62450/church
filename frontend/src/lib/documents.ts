@@ -13,13 +13,15 @@
  * `normalizePlacement` does on the Liturgy step, and the Bulletin step's
  * fields (printed bulletin PR 2b) always, each text cut to its limit, with
  * the cover picture's id or null (PR 3b: a body that says nothing would keep
- * the saved picture and print PR 1's box).
+ * the saved picture and print PR 1's box), and the Affirmation of Faith
+ * always (the affirmation spec: a body that says nothing would keep the
+ * saved choice), its own text cut to the section limit.
  */
 import type { components } from "@/lib/api/schema";
 import type { ServiceBulletin } from "@/lib/api/types";
 import { emptyServiceBulletin, MAX_LENGTH as BULLETIN_MAX } from "@/lib/draft/bulletin";
 import { fingerprint } from "@/lib/draft/fingerprint";
-import { draftToServicePayload } from "@/lib/draft/mapping";
+import { draftToServicePayload, TODAYS_AFFIRMATION, type AffirmationPayload } from "@/lib/draft/mapping";
 import { CARRY_KEYS, SLOTS, type DraftV1, type Slot } from "@/lib/draft/schema";
 import type { DocumentVariant, PrintedFormat } from "@/lib/download";
 import { clipChars, MAX_REF_LENGTH } from "@/lib/hymns/match-request";
@@ -124,6 +126,7 @@ export function serviceBody(draft: DraftV1): DocumentBody["service"] {
         insert_after: normalizePlacement(element.insert_after) as Placement,
       })),
     bulletin: clipBulletin(payload.bulletin ?? emptyServiceBulletin()),
+    affirmation: { ...(payload.affirmation ?? TODAYS_AFFIRMATION), text: clipChars(payload.affirmation?.text ?? "", MAX_CARD_TEXT) },
   };
 }
 
@@ -142,6 +145,8 @@ export type SavedCopy = {
   custom_elements?: { label: string; text: string; insert_after: string }[];
   /** Printed bulletin PR 2b; missing reads as nothing filled in. */
   bulletin?: ServiceBulletin | null;
+  /** The affirmation spec; missing reads as the Apostles' Creed, switched on. */
+  affirmation?: AffirmationPayload | null;
 };
 
 /** The server's `hymn_search.normalize_title`: NFKC, whitespace collapsed, trimmed, case-folded. */
@@ -160,7 +165,8 @@ function titleKey(title: string): string {
  * it, so a hymn resolved by title or a text the body already cut to its
  * limit never looks like someone else's change (5a-3 build review M2). The
  * bulletin fields count too (printed bulletin PR 2b): another device's
- * change to the announcements is someone else's change.
+ * change to the announcements is someone else's change, and so is the
+ * Affirmation of Faith (the affirmation spec; missing is the Apostles' Creed).
  * `withHymnal` false leaves the hymnal out: a body with none takes the
  * church's.
  */
@@ -190,7 +196,13 @@ export function savedCopyFingerprint(s: SavedCopy, { withHymnal = true }: { with
       insert_after: normalizePlacement(element.insert_after),
     })),
     bulletin: savedBulletin(s.bulletin ?? emptyServiceBulletin(), clean),
+    affirmation: savedAffirmation(s.affirmation ?? TODAYS_AFFIRMATION, clean),
   });
+}
+
+/** An Affirmation of Faith as the archive keeps it (`affirmation.read`, then Word-safe and trimmed): text only for "own". */
+function savedAffirmation(a: AffirmationPayload, clean: (text: string) => string) {
+  return { include: a.include, choice: a.choice, text: a.choice === "own" ? clean(a.text) : "" };
 }
 
 /**

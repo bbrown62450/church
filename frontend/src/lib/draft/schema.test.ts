@@ -9,10 +9,10 @@ import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 describe("draft schema and freshDraft (F §4.6)", () => {
   it("a fresh draft is dated next Sunday with every field empty and the F §4.6 defaults", () => {
     const d = testDraft();
-    expect(DRAFT_VERSION).toBe(4);
+    expect(DRAFT_VERSION).toBe(5);
     expect(draftV1Schema.parse(d)).toEqual(d);
     expect(d).toMatchObject({
-      version: 4,
+      version: 5,
       user_id: USER_ID,
       church_id: churchProfile().id,
       created_at: "2026-09-29T16:00:00.000Z",
@@ -38,7 +38,13 @@ describe("draft schema and freshDraft (F §4.6)", () => {
         slots: { opening: null, response: null, closing: null },
         alternatives: null,
       },
-      liturgy: { sermon_title: "", include_communion: true, communion_origin: "default", custom_elements: [] },
+      liturgy: {
+        sermon_title: "",
+        include_communion: true,
+        communion_origin: "default",
+        custom_elements: [],
+        affirmation: { include: true, choice: "apostles", text: "", origin: "default" }, // the affirmation spec
+      },
       bulletin: {
         cover_image_id: null,
         prelude: { title: "", composer: "" },
@@ -68,6 +74,11 @@ describe("draft schema and freshDraft (F §4.6)", () => {
     expect(none.liturgy.cards.benediction).toEqual({ enabled: true, text: "", origin: "default" });
     const older = freshDraft({ church: { id: CHURCH_IDS.grace, timezone: "America/New_York" }, user, now: DRAFT_NOW });
     expect(older.liturgy.cards.benediction.text).toBe(DEFAULT_BENEDICTION_FALLBACK); // an API without the field
+    expect(older.liturgy.affirmation).toEqual({ include: true, choice: "apostles", text: "", origin: "default" });
+    const own = freshDraft({ church: churchProfile({ default_affirmation: { choice: "own", text: "We trust in God." } }), user, now: DRAFT_NOW });
+    expect(own.liturgy.affirmation).toEqual({ include: true, choice: "own", text: "We trust in God.", origin: "default" });
+    const nicene = freshDraft({ church: churchProfile({ default_affirmation: { choice: "nicene", text: "stale" } }), user, now: DRAFT_NOW });
+    expect(nicene.liturgy.affirmation).toEqual({ include: true, choice: "nicene", text: "", origin: "default" });
   });
 
   it("uses the church's zone, strictly after today, and the browser's zone when the zone is not valid", () => {
@@ -93,7 +104,7 @@ describe("draft schema and freshDraft (F §4.6)", () => {
       { ...d, readings: { ...d.readings, date_iso: "2026-02-30" } },
       { ...d, readings: { ...d.readings, occasion: `${long}x` } },
       { ...d, last_step: "summary" },
-      { ...d, version: 5 },
+      { ...d, version: 6 },
       { ...d, bulletin: undefined }, // version 3 needs the bulletin (PR 2b)
       { ...d, bulletin: { ...d.bulletin, cover_image_id: undefined } }, // version 4 needs the picture's id or null (PR 3b)
       { ...d, bulletin: { ...d.bulletin, carried: ["picture"] } },
@@ -104,6 +115,9 @@ describe("draft schema and freshDraft (F §4.6)", () => {
       { ...d, editing: { service_id: "s1", saved_at: "2026-10-01T14:42:00+00:00", date_iso: "2026-02-30" } },
       { ...d, readings: { ...d.readings, fields_origin: "typed" } },
       { ...d, liturgy: { ...d.liturgy, cards: { ...d.liturgy.cards, benediction: undefined } } },
+      { ...d, liturgy: { ...d.liturgy, affirmation: undefined } }, // version 5 needs the Affirmation (affirmation spec)
+      { ...d, liturgy: { ...d.liturgy, affirmation: { ...d.liturgy.affirmation, choice: "brief_statement" } } },
+      { ...d, liturgy: { ...d.liturgy, affirmation: { ...d.liturgy.affirmation, origin: "typed" } } },
       { ...d, updated_at: "not a time" },
       { ...d, created_at: "" },
     ]) {

@@ -101,7 +101,7 @@ describe("serviceToDraft and markSaved (slice 5a-3; F §4.6 Loading an archived 
       created_at: OPEN_AT.toISOString(),
       last_step: "review",
       save_key_fingerprint: null,
-      version: 4,
+      version: 5,
       editing: { service_id: SERVICE_ID, saved_at: "2026-10-01T14:42:00.123456+00:00", date_iso: "2026-10-04" },
       readings: {
         date_iso: "2026-10-04",
@@ -124,7 +124,12 @@ describe("serviceToDraft and markSaved (slice 5a-3; F §4.6 Loading an archived 
           closing: { hymn_id: null, title: "Old Favorite", number: 12, hymnal: "PH1990" }, // not in the hymnal
         },
       },
-      liturgy: { sermon_title: "Living Water", include_communion: true, communion_origin: "archive" },
+      liturgy: {
+        sermon_title: "Living Water",
+        include_communion: true,
+        communion_origin: "archive",
+        affirmation: { include: true, choice: "apostles", text: "", origin: "archive" },
+      },
     });
     expect(d.save_key).not.toBe(opened().save_key);
     expect(d.liturgy.cards.call_to_worship).toEqual({ enabled: true, text: "Leader: Come. People: We come.", origin: "archive" });

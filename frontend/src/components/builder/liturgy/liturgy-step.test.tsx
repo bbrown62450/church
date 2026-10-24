@@ -154,7 +154,7 @@ describe("the Liturgy step (S User experience)", () => {
       "First Reading · Isaiah 5:1-7 auto",
       "New Testament Reading · Philippians 3:4b-14 auto",
       "Sermon Title · [Sermon title]",
-      "Affirmation of Faith · Apostles' Creed",
+      "Include Affirmation of Faith",
       "Second Hymn",
       "Include communion liturgy (The Sacrament of the Lord's Supper)",
       "Prayers of the People",
@@ -997,8 +997,9 @@ describe("custom elements (S Custom elements)", () => {
     const anthem = await screen.findByRole("region", { name: "Anthem" });
     await user.click(within(anthem).getByRole("button", { name: "More actions for Anthem" }));
     await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
-    // After the Sermon row come two landmark rows, then the communion card, whose heading takes focus.
-    await waitFor(() => expect(within(card(COMMUNION)).getByRole("heading", { name: COMMUNION })).toHaveFocus());
+    // After the Sermon row comes the Affirmation of Faith card (affirmation spec), whose heading takes focus.
+    const affirmation = "Include Affirmation of Faith";
+    await waitFor(() => expect(within(card(affirmation)).getByRole("heading", { name: affirmation })).toHaveFocus());
     await user.click(within(card("Minute for Mission")).getByRole("button", { name: "More actions for Minute for Mission" }));
     await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Add custom element" })).toHaveFocus());

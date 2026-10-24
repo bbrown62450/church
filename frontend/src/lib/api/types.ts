@@ -54,6 +54,10 @@ export type LiturgyConfig = components["schemas"]["LiturgyConfigOut"];
 export type LiturgySection = components["schemas"]["SectionSpecOut"];
 export type OutlineItem = components["schemas"]["OutlineItemOut"];
 export type CommunionBlock = components["schemas"]["CommunionBlockOut"];
+/** The affirmation spec: the Affirmation card's labels and choices (`GET /liturgy/config`), a service's and the church's. */
+export type AffirmationConfig = components["schemas"]["AffirmationConfigOut"];
+export type ServiceAffirmation = components["schemas"]["ServiceAffirmation"];
+export type ChurchAffirmation = components["schemas"]["ChurchAffirmation"];
 /** `POST /liturgy/generate` (slice 4a): the body the step sends (one section, no overrides) and the answer. */
 export type GenerateLiturgyBody = components["schemas"]["GenerateLiturgyIn"];
 export type GenerateLiturgyResult = components["schemas"]["GenerateLiturgyOut"];

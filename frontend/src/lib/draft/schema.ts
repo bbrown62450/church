@@ -8,7 +8,8 @@
  * adds `bulletin`, the Bulletin step's weekly fields (`bulletin.ts`), and the
  * step id "bulletin". Version 4 (printed bulletin PR 3b) adds the week's
  * cover picture, `bulletin.cover_image_id`, and its box to check ("cover",
- * first in `CARRY_KEYS`). The names `DraftV1` and
+ * first in `CARRY_KEYS`). Version 5 (the affirmation spec, 2026-10-24) adds
+ * `liturgy.affirmation`, the Affirmation of Faith card. The names `DraftV1` and
  * `draftV1Schema` stay, so no importer changes. Strings are
  * bounded generously (20 000) so a stored draft is never rejected for
  * length; the UI limits live in the components. `readings.scriptures` holds
@@ -20,7 +21,7 @@ import { isFirstSundayOfMonth, isValidDateIso, nextSunday, todayIn } from "@/lib
 import { DEFAULT_BENEDICTION_FALLBACK } from "@/lib/liturgy/defaults";
 import { DEFAULT_ENABLED } from "@/lib/liturgy/sections";
 
-export const DRAFT_VERSION = 4;
+export const DRAFT_VERSION = 5;
 
 export const STEP_IDS = ["readings", "hymns", "liturgy", "bulletin", "review"] as const;
 export type StepId = (typeof STEP_IDS)[number];
@@ -64,6 +65,31 @@ const card = z.object({
   origin: z.enum(["empty", "typed", "ai", "default", "archive"]),
 });
 export type LiturgyCard = z.infer<typeof card>;
+
+/** The Affirmation of Faith's choices (`affirmation.CHOICES`). */
+export const AFFIRMATION_CHOICES = ["apostles", "nicene", "own"] as const;
+export type AffirmationChoice = (typeof AFFIRMATION_CHOICES)[number];
+/**
+ * The Affirmation of Faith card (affirmation spec): switched on or off, the
+ * choice, the own text (kept while another choice is picked; sent only for
+ * "own") and whether it follows the church's default.
+ */
+const affirmation = z.object({
+  include: z.boolean(),
+  choice: z.enum(AFFIRMATION_CHOICES),
+  text,
+  origin: z.enum(["default", "user", "archive"]),
+});
+export type DraftAffirmation = z.infer<typeof affirmation>;
+/** The church's default (`GET /church`'s `default_affirmation`). */
+export type AffirmationDefault = { choice: AffirmationChoice; text: string };
+/** What every service printed before the change, and a church's default until an admin sets one. */
+export const APOSTLES_DEFAULT: AffirmationDefault = { choice: "apostles", text: "" };
+
+/** A card following the church's default: switched on, its choice, and its text for "own". */
+export function affirmationFromDefault(def: AffirmationDefault): DraftAffirmation {
+  return { include: true, choice: def.choice, text: def.choice === "own" ? def.text : "", origin: "default" };
+}
 
 /** The three people the Bulletin step can change for one week (`bulletin_settings.ROLES`). */
 export const PEOPLE = ["worship_leader", "liturgist", "organist"] as const;
@@ -147,6 +173,7 @@ export const draftV1Schema = z.object({
       Object.fromEntries(SECTION_KEYS.map((key) => [key, card])) as Record<SectionKey, typeof card>,
     ),
     custom_elements: z.array(z.object({ id: text, label: text, text, insert_after: text })),
+    affirmation,
   }),
   bulletin,
 });
@@ -157,9 +184,16 @@ export type DraftReadings = DraftV1["readings"];
 /**
  * The profile fields the draft needs (`GET /church`): the zone for
  * `freshDraft` (slice 2a) and the church's default benediction, which an
- * untouched Benediction card shows (slice 4a; an older API leaves it out).
+ * untouched Benediction card shows (slice 4a; an older API leaves it out),
+ * and its default Affirmation of Faith (affirmation spec; likewise).
  */
-export type DraftChurch = { id: string; timezone?: string | null; timezone_valid?: boolean; default_benediction?: string };
+export type DraftChurch = {
+  id: string;
+  timezone?: string | null;
+  timezone_valid?: boolean;
+  default_benediction?: string;
+  default_affirmation?: AffirmationDefault;
+};
 
 /** The church's zone for `todayIn`, or undefined (the browser's zone) when the profile says it is not valid. */
 export function churchZone(church: DraftChurch): string | undefined {
@@ -172,7 +206,9 @@ export function churchZone(church: DraftChurch): string | undefined {
  * Prayers of the People, the benediction card `default`-origin with the
  * church's default benediction (DEFAULT_BENEDICTION_FALLBACK, the full
  * Halverson text, when the profile has none; slice 4b), communion on for a
- * first Sunday, an empty Bulletin step (PR 2b; last week's carries in when
+ * first Sunday, the Affirmation of Faith following the church's default
+ * (the Apostles' Creed when the profile has none), an empty Bulletin step
+ * (PR 2b; last week's carries in when
  * the Bulletin step or Review shows it), a new save key with no pending
  * fingerprint, on step 1.
  */
@@ -229,6 +265,7 @@ export function freshDraft({
       communion_origin: "default",
       cards,
       custom_elements: [],
+      affirmation: affirmationFromDefault(church.default_affirmation ?? APOSTLES_DEFAULT),
     },
     bulletin: freshBulletin(),
   };

@@ -15,8 +15,8 @@
  *   "Replace text"; clarification 33), compare before the queued request is
  *   sent and again when the answer arrives.
  */
-import type { DraftV1, LiturgyCard, SectionKey } from "@/lib/draft/schema";
-import { SECTION_KEYS } from "@/lib/draft/schema";
+import type { AffirmationChoice, AffirmationDefault, DraftAffirmation, DraftV1, LiturgyCard, SectionKey } from "@/lib/draft/schema";
+import { affirmationFromDefault, SECTION_KEYS } from "@/lib/draft/schema";
 
 import { applyCommunionDefault } from "./defaults";
 
@@ -109,6 +109,30 @@ export function setCommunion(d: DraftV1, include: boolean): DraftV1 {
 export function restoreCommunionDefault(d: DraftV1): DraftV1 {
   const next = d.liturgy.communion_origin === "default" ? d : withLiturgy(d, { communion_origin: "default" });
   return applyCommunionDefault(next);
+}
+
+function withAffirmation(d: DraftV1, next: DraftAffirmation): DraftV1 {
+  const a = d.liturgy.affirmation;
+  if (a.include === next.include && a.choice === next.choice && a.text === next.text && a.origin === next.origin) return d;
+  return withLiturgy(d, { affirmation: next });
+}
+
+/** The Affirmation of Faith switch, choice and own text (affirmation spec): each makes the card the member's own. */
+export function setAffirmationInclude(d: DraftV1, include: boolean): DraftV1 {
+  return withAffirmation(d, { ...d.liturgy.affirmation, include, origin: "user" });
+}
+
+export function setAffirmationChoice(d: DraftV1, choice: AffirmationChoice): DraftV1 {
+  return withAffirmation(d, { ...d.liturgy.affirmation, choice, origin: "user" });
+}
+
+export function editAffirmationText(d: DraftV1, text: string): DraftV1 {
+  return withAffirmation(d, { ...d.liturgy.affirmation, text, origin: "user" });
+}
+
+/** "Use church default": the church's default, followed again. */
+export function restoreAffirmationDefault(d: DraftV1, def: AffirmationDefault): DraftV1 {
+  return withAffirmation(d, affirmationFromDefault(def));
 }
 
 /** Appends an element with its label and text trimmed and its place normalized (S "On Add"). */

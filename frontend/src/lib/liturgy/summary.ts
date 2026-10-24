@@ -3,9 +3,18 @@
  * spec, Frontend "Builder shell" `summary.ts`), one function so they cannot
  * disagree: `enabled` = cards switched on; `ready` = those whose text is
  * non-blank after trimming; `communion` = `include_communion`;
- * `customCount` = the custom elements.
+ * `customCount` = the custom elements. `affirmationSummary` is the summary's
+ * Affirmation of Faith line (the affirmation spec).
  */
-import { SECTION_KEYS, type DraftV1 } from "@/lib/draft/schema";
+import { SECTION_KEYS, type DraftAffirmation, type DraftV1 } from "@/lib/draft/schema";
+
+const AFFIRMATION_NAMES = { apostles: "Apostles' Creed", nicene: "Nicene Creed", own: "Your own text" } as const;
+
+export function affirmationSummary(a: DraftAffirmation): string {
+  if (!a.include) return "Affirmation of Faith: Off";
+  const blank = a.choice === "own" && a.text.trim() === "";
+  return `Affirmation of Faith: ${AFFIRMATION_NAMES[a.choice]}${blank ? " (nothing typed yet)" : ""}`;
+}
 
 export type LiturgyCounts = { ready: number; enabled: number; communion: boolean; customCount: number };
 
