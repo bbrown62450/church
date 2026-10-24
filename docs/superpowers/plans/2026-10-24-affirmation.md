@@ -133,7 +133,7 @@ def test_the_creeds_are_the_texts_checked_for_this_change():
     assert len(lines) == 32                                    # ELLC's 32 sense lines
     assert lines[0] == "We believe in one God," and lines[-1] == "and the life of the world to come. Amen."
     assert lines[25] == "who proceeds from the Father and the Son,"   # line 26, without ELLC's brackets
-    assert "[" not in af.NICENE_CREED and "—" not in af.NICENE_CREED
+    assert "[" not in af.NICENE_CREED and "\u2014" not in af.NICENE_CREED
     assert af.NICENE_CREDIT == ("English translations of the Nicene Creed, © 1998 English Language Liturgical "
                                 "Consultation (ELLC), and used by permission. www.englishtexts.org")
     assert pb.APOSTLES_CREED is af.APOSTLES_CREED
@@ -2623,7 +2623,7 @@ describe("the Affirmation of Faith card (affirmation spec)", () => {
     expect(within(region).getByText(/Consultation \(ELLC\), and used by permission\./)).toBeInTheDocument();
     expect(within(region).getByText("You changed this.")).toBeInTheDocument();
     await waitFor(() => expect(stored().liturgy.affirmation).toEqual({ include: true, choice: "nicene", text: "", origin: "user" }));
-    expect(region.textContent).not.toContain("—");
+    expect(region.textContent).not.toContain("\u2014");
   });
 
   it("switched off hides the choices and says it is not printed or emailed", async () => {
@@ -2633,7 +2633,7 @@ describe("the Affirmation of Faith card (affirmation spec)", () => {
     expect(within(region).queryAllByRole("radio")).toEqual([]);
     expect(within(region).getByText(`${AFFIRMATION_OFF} You changed this.`)).toBeInTheDocument();
     await waitFor(() => expect(stored().liturgy.affirmation.include).toBe(false));
-    expect(region.textContent).not.toContain("—");
+    expect(region.textContent).not.toContain("\u2014");
   });
 
   it("takes own text in a box like a prayer card's, and Use church default puts the default back with focus on the switch", async () => {
@@ -3928,7 +3928,7 @@ describe("Settings → Liturgy: the Affirmation of Faith default (affirmation sp
     expect(await screen.findByText(AFFIRMATION_SAVED)).toBeInTheDocument();
     expect(patches(api).map((r) => r.body)).toEqual([{ default_affirmation: { choice: "own", text: OWN } }]);
     await waitFor(() => expect(save).toBeDisabled());
-    expect(card.textContent).not.toContain("—");
+    expect(card.textContent).not.toContain("\u2014");
   });
 
   it("shows a creed's text and credit, and asks before leaving with an unsaved change", async () => {
@@ -4534,7 +4534,7 @@ Each row breaks one rule the tests must hold. For each: make the change in the n
 | P4 | a body without it prints as today | `backend/usecases/documents.py`, the first `affirmation=clean.affirmation or Affirmation())` → `affirmation=clean.affirmation or Affirmation(True, "nicene"))` | `backend/tests/test_affirmation.py backend/tests/test_api_affirmation.py` | `2 failed, 28 passed` |
 | P5 | members cannot change the church default | `backend/api/routes/me.py`: `Depends(require_admin),` → `Depends(require_church),`, and in `backend/usecases/church_admin.py` `update_profile` delete the line `        require_admin_role(role)` | `backend/tests/test_api_affirmation.py` | `1 failed, 10 passed` (either guard alone still refuses) |
 | P6 | a saved service without it keeps NULL, and a PUT without it keeps the saved choice | `backend/usecases/archive.py`: `        **({} if clean.affirmation is None else {"affirmation": clean.affirmation.to_json()}),` → `        "affirmation": (clean.affirmation or af.Affirmation()).to_json(),` | `backend/tests/test_api_affirmation.py` | `2 failed, 9 passed` |
-| F1 | no em dash in user-facing copy | `frontend/src/components/builder/liturgy/affirmation-card.tsx`: `"Not printed or emailed."` → `"Not printed — or emailed."` | `src/components/builder/liturgy/affirmation-card.test.tsx` | `1 failed | 4 passed (5)` |
+| F1 | no em dash in user-facing copy | `frontend/src/components/builder/liturgy/affirmation-card.tsx`: `"Not printed or emailed."` → `"Not printed \u2014 or emailed."` | `src/components/builder/liturgy/affirmation-card.test.tsx` | `1 failed | 4 passed (5)` |
 | F2 | 44 px rows at 375 px | same file: `className="flex min-h-11 cursor-pointer items-center gap-3 text-sm"` → `className="flex cursor-pointer items-center gap-3 text-sm"` | `src/components/builder/liturgy/affirmation-card.test.tsx` | `1 failed | 4 passed (5)` |
 | F3 | an old saved draft stays Saved (the payload leaves out today's value) | `frontend/src/lib/draft/mapping.ts`: `    ...(today ? {} : { affirmation }),` → `    affirmation,` | `src/lib/draft/migrate.test.ts src/lib/liturgy/affirmation.test.ts` | `2 failed | 12 passed (14)` |
 | F4 | an old saved service's draft prints as saved | `frontend/src/lib/draft/migrate.ts`: `isRecord(draft.editing) ? "archive" : "default"` → `"default"` | `src/lib/draft/migrate.test.ts` | `3 failed | 4 passed (7)` |
