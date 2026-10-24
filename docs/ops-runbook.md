@@ -1027,6 +1027,26 @@ PR B.
 | Not on the phone | The new choices, the email's attachments, a member's refused change and the exact creed texts: tests only | 2026-10-24 |
 | Follow-ups | Next: Affirmation PR B (the card and the Settings default), opened now that the live API names the new field | 2026-10-24 |
 
+### Affirmation PR B record
+
+Affirmation PR B, the pages of the Affirmation of Faith (the Liturgy step's
+card with its switch and the Apostles' Creed, the Nicene Creed or the
+church's own text; the church default on Settings → Liturgy), merged as PR
+#65 after PR #64 was live. No migration and no backend change.
+
+| Step | Result | Date |
+|---|---|---|
+| Merge and deploy | PR #65 merged 23:17 UTC (19:17 Eastern), merge commit `788ac62`. CI on `main`: success. `/health/ready` `{"ok":true,"db":"ok"}` | 2026-10-24 |
+| Phone B1. The card | "Include Affirmation of Faith" after the Sermon Title, switched on, the Apostles' Creed chosen | 2026-10-24 |
+| Phone B2. The Nicene Creed | "Show creed text" showed it line by line with ELLC's acknowledgement under it | 2026-10-24 |
+| Phone B3. The printed bulletin | The PDF printed the Nicene Creed in bold, line by line, with ELLC's line | 2026-10-24 |
+| Phone B4. Switched off | The Affirmation was gone from the bulletin Word file | 2026-10-24 |
+| Phone B5. The church default | Own text saved as the default: "Affirmation of Faith default saved." | 2026-10-24 |
+| Phone B6. An older service | A service saved before today showed the Apostles' Creed, "Set from the saved service." | 2026-10-24 |
+| Phone B7. The real default | The owner set the church default back to the Apostles' Creed | 2026-10-24 |
+| Not on the phone | A member's read-only default, the duplicate-save guard across the deploy, the email's attachments: tests only | 2026-10-24 |
+| Follow-ups | Next, in the owner's order: text formatting (decisions 3 to 5), the em-dash follow-up, Theme PR 2 | 2026-10-24 |
+
 ## Backups
 
 - **Workflow:** `.github/workflows/backup.yml` (`db-backup`). Daily at 08:37 UTC,
