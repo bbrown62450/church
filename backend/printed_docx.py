@@ -23,6 +23,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
+import formatting
 import printed_bulletin as pb
 import printed_pdf
 from worship_service import append_paragraph
@@ -59,7 +60,8 @@ def _add_line(doc, line: pb.Line):
     elif line.style == "indent":
         fmt.left_indent = Inches(0.5)
     elif line.style == "item":
-        fmt.left_indent, fmt.first_line_indent = Inches(0.25), Inches(-0.25)
+        hang = Pt(formatting.hanging_points(line.marker))
+        fmt.left_indent, fmt.first_line_indent = hang, -hang
     if line.style in _KEEP_WITH_NEXT:
         fmt.keep_with_next = True
     if line.marker:

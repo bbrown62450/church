@@ -53,9 +53,9 @@ The same blocks everywhere; only the renderer differs.
 | Text | a paragraph with its line breaks, runs bold or italic | a paragraph, `<b>`/`<i>` | a paragraph, runs bold or italic |
 | `#` | bold 13 pt, 6 pt before, kept with the next | bold 12 pt (15 leading), 6 pt before, kept with two lines | bold 12 pt, 6 pt before, kept with the next |
 | `##` | bold 12 pt, likewise | bold 11 pt (13 leading), likewise | bold 11 pt, likewise |
-| Item | marker, tab, text; 0.25 in hanging indent | marker as the bullet, text indented 18 pt | marker, tab, text; 0.25 in hanging indent |
+| Item | marker, tab, text; 0.25 in hanging indent, 0.375 in after a number (`formatting.hanging_points`, so "100." fits) | marker as the bullet, text indented 18 pt, 27 pt after a number | marker, tab, text; as the Word copy |
 | Announcements | n/a | heading and item lines centered, the item's marker before its text | likewise |
-| Prayer of Confession (all three files); own Affirmation text (printed bulletin only; the Word copy prints it plain, as today) | every run bold, italic added | likewise | likewise |
+| Prayer of Confession (all three files); own Affirmation text (printed bulletin only; the Word copy prints it plain, as today) | every run bold, italic added, an item's marker too | likewise | likewise |
 
 **Headings and the section's own heading** (the owner's answer 1). A heading inside a box is always under the section's heading and never uses Word's Heading styles (so it is not in Word's navigation pane and the Word copy's section headings stay the only Heading 2s). In the Word copy it is bold Times at 13 or 12 pt, under section headings in Word's Heading 2 (13 pt bold, blue, the heading font). In the printed bulletin (PDF and Word) it is bold at 12 or 11 pt in the case typed: the element's own heading above it (for example "OPENING PRAYER") stays as it is, 11 pt bold in capitals with the leader's name at the right, so a `##` heading is the element heading's size and differs by its case, and a `#` heading is a point larger while the capitals keep the element's heading the higher level. A heading at the foot of a PDF page moves to the next page with what follows (`printed_pdf.KEEP`: itself and two lines, centered or not, as an element heading does today).
 

@@ -47,6 +47,13 @@ _BULLET = re.compile(r"- (.*)")
 _NUMBER = re.compile(r"([0-9]{1,3}\.) (.*)")
 
 
+def hanging_points(marker: str) -> float:
+    """An item's hanging indent in points, in every file: 18 (0.25 in) after BULLET; 27 (0.375 in) after a number,
+    so the widest one ("999.", 19.25 pt in 11 pt Times, plus the PDF's bullet gap of 6.6 pt) still fits and a
+    list's words line up from "1." to "100." (fix agent, finding 6)."""
+    return 18.0 if marker == BULLET else 27.0
+
+
 @dataclass(frozen=True)
 class Span:
     text: str

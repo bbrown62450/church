@@ -30,6 +30,7 @@ from reportlab.platypus import (BaseDocTemplate, CondPageBreak, Flowable, Frame,
                                 PageTemplate, Paragraph, Spacer, Table, TableStyle)
 
 import bulletin_image
+import formatting
 import printed_bulletin as pb
 
 SHEET_WIDTH = 2 * pb.PAGE_WIDTH        # legal, landscape: 14 x 8.5 in
@@ -110,6 +111,9 @@ STYLES = {
 }
 # An item of a box all bold (the Prayer of Confession, own Affirmation text): its marker bold too (Line.marker_bold).
 BOLD_ITEM = ParagraphStyle("bold_item", parent=STYLES["item"], bulletFontName="Times-Bold")
+# A numbered item hangs wider than a bulleted one (formatting.hanging_points), so "100." fits its indent.
+NUMBERED, BOLD_NUMBERED = (ParagraphStyle(f"{s.name}_numbered", parent=s, leftIndent=formatting.hanging_points("1."))
+                           for s in (STYLES["item"], BOLD_ITEM))
 
 
 def _markup(line: pb.Line) -> str:
@@ -129,10 +133,17 @@ def _flowables(line: pb.Line, width: float) -> list[Flowable]:
     return [*keep, _flowable(line, width)]
 
 
+def _style_of(line: pb.Line) -> ParagraphStyle:
+    """An item's style for its marker (a bold one, a number's wider indent); any other line's, its own."""
+    if line.style != "item" or line.marker == formatting.BULLET:
+        return BOLD_ITEM if line.marker_bold else STYLES[line.style]
+    return BOLD_NUMBERED if line.marker_bold else NUMBERED
+
+
 def _flowable(line: pb.Line, width: float) -> Flowable:
     # An item's marker is "•" or a typed number (formatting.parse), never the user's other text.
     bullet = {"bulletText": to_pdf_text(line.marker)} if line.marker else {}
-    paragraph = Paragraph(_markup(line), BOLD_ITEM if line.marker_bold else STYLES[line.style], **bullet)
+    paragraph = Paragraph(_markup(line), _style_of(line), **bullet)
     if not line.right:
         return paragraph
     right = Paragraph(escape(to_pdf_text(line.right)), STYLES["right"])

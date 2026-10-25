@@ -72,7 +72,8 @@ def _add_text(doc, text: str, *, bold: bool = False) -> None:
     """A box's text (formatting spec). Without a mark, one paragraph exactly
     as before (its line breaks kept); otherwise a paragraph per block: a
     heading bold at HEADING_POINTS, kept with the next; an item with its
-    marker and a 0.25 in hanging indent; text with its line breaks."""
+    marker and a hanging indent (0.25 in, 0.375 in after
+    a number: formatting.hanging_points); text with its line breaks."""
     if not formatting.has_marks(text):
         if bold:
             doc.add_paragraph().add_run(text).bold = True
@@ -86,7 +87,8 @@ def _add_text(doc, text: str, *, bold: bool = False) -> None:
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.keep_with_next = True
         if block.kind == "item":
-            p.paragraph_format.left_indent, p.paragraph_format.first_line_indent = Inches(0.25), Inches(-0.25)
+            hang = Pt(formatting.hanging_points(block.marker))
+            p.paragraph_format.left_indent, p.paragraph_format.first_line_indent = hang, -hang
             p.add_run(block.marker + "\t").bold = bold or None
         for span in block.spans:
             run = p.add_run(span.text)

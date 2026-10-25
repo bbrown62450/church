@@ -277,10 +277,10 @@ def test_the_word_copy_reads_the_marks():
     assert [(r.text, r.bold, r.italic) for r in text.runs] == [
         ("We pray for ", None, None), ("peace", True, None), (" and ", None, None), ("justice", None, True),
         (".", None, None)]
-    for item, marker in (("•\tthe sick", "•\t"), ("12.\tthe lonely", "12.\t")):
+    for item, marker, hang in (("•\tthe sick", "•\t", 0.25), ("12.\tthe lonely", "12.\t", 0.375)):
         p = _paragraph(doc, item)
         assert p.runs[0].text == marker
-        assert (p.paragraph_format.left_indent, p.paragraph_format.first_line_indent) == (Inches(0.25), Inches(-0.25))
+        assert (p.paragraph_format.left_indent, p.paragraph_format.first_line_indent) == (Inches(hang), -Inches(hang))
     confession = _paragraph(doc, "We confess our sin.")
     assert [(r.text, r.bold, r.italic) for r in confession.runs] == [
         ("We confess ", True, None), ("our sin", True, True), (".", True, None)]
@@ -370,9 +370,10 @@ def test_the_printed_bulletin_reads_the_marks_in_pdf_and_word(church):
     assert _paragraph(word, "For the world").paragraph_format.keep_with_next
     assert _paragraph(word, "Near").paragraph_format.keep_with_next
     assert not _paragraph(word, "We pray for peace and justice.").paragraph_format.keep_with_next
-    item = _paragraph(word, "•\tthe sick")
-    assert (item.paragraph_format.left_indent, item.paragraph_format.first_line_indent) == (Inches(0.25),
-                                                                                           Inches(-0.25))
+    for text, hang in (("•\tthe sick", 0.25), ("12.\tthe lonely", 0.375)):
+        item = _paragraph(word, text)
+        assert (item.paragraph_format.left_indent, item.paragraph_format.first_line_indent) == (Inches(hang),
+                                                                                               -Inches(hang))
     assert [(r.text, r.bold) for r in _paragraph(word, "We pray for peace and justice.").runs][1] == ("peace", True)
 
 
@@ -406,6 +407,38 @@ def test_a_box_all_bold_prints_its_list_markers_bold_in_pdf_and_word(church):
                                 ("8.", "the sick", "/Times-Roman")):
         at = runs.index((words, font))
         assert runs[at - 1] == (marker, font)
+
+
+_NUMBERED = "1. one\n10. ten\n100. hundred\n999. most"
+
+
+def test_a_list_s_words_line_up_from_one_to_three_digit_numbers_in_the_pdf():
+    """A numbered item hangs 27 pt (formatting.hanging_points): the widest number ("999.") and the PDF's bullet gap
+    fit, so no number pushes its words right; a bulleted item keeps 18 pt (finding 6)."""
+    for box in ("opening_prayer", "prayer_of_confession"):
+        ps = service()
+        ps = dataclasses.replace(ps, resolved=dataclasses.replace(
+            ps.resolved, liturgy={**ps.resolved.liturgy, box: _NUMBERED + "\n- bullet"}))
+        starts = {}
+        for page in PdfReader(BytesIO(printed_pdf.render_pdf(ps))).pages:
+            page.extract_text(visitor_text=lambda text, cm, tm, _font, _size: starts.setdefault(
+                text.strip(), round(tm[4] + cm[4], 2)))
+        words = [starts[w] - starts["1."] for w in ("one", "ten", "hundred", "most", "bullet")]
+        assert words == [27.0, 27.0, 27.0, 27.0, 18.0], box
+
+
+def test_a_numbered_item_hangs_wider_than_a_bulleted_one_in_both_word_files():
+    """Word's hanging indent is the marker's tab stop: "100." (19.25 pt) passes 0.25 in, which would send its words
+    to the next default stop, so a number hangs 0.375 in (finding 6)."""
+    ps = service()
+    ps = dataclasses.replace(ps, resolved=dataclasses.replace(ps.resolved, liturgy={**ps.resolved.liturgy,
+                                                                                    "opening_prayer": _NUMBERED}))
+    liturgy = dict(new_kwargs()["liturgy"], opening_prayer=_NUMBERED)
+    for content in (printed_docx.render_docx(ps), worship_service.build_docx(**{**new_kwargs(), "liturgy": liturgy})):
+        doc = Document(BytesIO(content))
+        for text in ("1.\tone", "10.\tten", "100.\thundred", "999.\tmost"):
+            fmt = _paragraph(doc, text).paragraph_format
+            assert (fmt.left_indent, fmt.first_line_indent) == (Inches(0.375), -Inches(0.375)), text
 
 
 def test_the_announcements_keep_a_heading_and_a_list_centered():
