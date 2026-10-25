@@ -290,6 +290,54 @@ def test_the_word_copy_reads_the_marks():
         ("Leader: Come, ", None), ("all", True), (".", None)]
 
 
+# Every Word copy box that prints through worship_service._add_text, each with its own words (fix agent, finding 1).
+_TEXT_BOXES = ("opening_prayer", "prayer_for_illumination", "prayers_of_the_people", "offertory_prayer", "benediction")
+_ANCHORS = ("call_to_worship", "opening_prayer", "first_hymn", "prayer_of_confession", "assurance",
+            "prayer_for_illumination", "ot_reading", "nt_reading", "sermon", "affirmation_of_faith", "second_hymn",
+            "communion", "prayers_of_the_people", "offertory_prayer", "third_hymn", "benediction", "end")
+
+
+def _boxed(name: str) -> str:
+    return f"# {name} heading\nWe pray **{name}**.\n- {name} item"
+
+
+def _assert_reads_the_marks(doc, name: str, *, bold: bool = False) -> None:
+    heading = _paragraph(doc, f"{name} heading")
+    assert heading.style.name == "Normal" and heading.paragraph_format.keep_with_next, name
+    assert [(r.bold, r.font.size) for r in heading.runs] == [(True, Pt(13))], name
+    assert [(r.text, r.bold) for r in _paragraph(doc, f"We pray {name}.").runs] == [
+        ("We pray ", True if bold else None), (name, True), (".", True if bold else None)], name
+    item = _paragraph(doc, f"•\t{name} item")
+    assert [(r.text, r.bold) for r in item.runs] == [("•\t", True if bold else None), (f"{name} item",
+                                                                                      True if bold else None)], name
+
+
+def test_every_word_copy_box_reads_the_marks():
+    liturgy = dict(new_kwargs()["liturgy"], **{key: _boxed(key) for key in _TEXT_BOXES},
+                   prayer_of_confession=_boxed("prayer_of_confession"))
+    custom = [{"label": f"Custom {anchor}", "text": _boxed(f"custom {anchor}"), "insert_after": anchor}
+              for anchor in _ANCHORS]
+    doc = Document(BytesIO(worship_service.build_docx(**{**new_kwargs(include_prayers_of_the_people=True),
+                                                           "liturgy": liturgy, "custom_elements": custom})))
+    for key in _TEXT_BOXES:
+        _assert_reads_the_marks(doc, key)
+    _assert_reads_the_marks(doc, "prayer_of_confession", bold=True)
+    for anchor in _ANCHORS:
+        _assert_reads_the_marks(doc, f"custom {anchor}")
+
+
+def test_own_affirmation_text_reads_the_marks_plain_in_the_word_copy():
+    """The spec's table: the Word copy prints own Affirmation text plain, as today (only the printed bulletin makes
+    it all bold): its marks read, nothing else bold (finding 2)."""
+    text = "I believe in **God** and *grace*.\n- the church\n# Amen"
+    doc = Document(BytesIO(worship_service.build_docx(**new_kwargs(affirmation=af.Affirmation(True, "own", text)))))
+    assert [(r.text, r.bold, r.italic) for r in _paragraph(doc, "I believe in God and grace.").runs] == [
+        ("I believe in ", None, None), ("God", True, None), (" and ", None, None), ("grace", None, True),
+        (".", None, None)]
+    assert [(r.text, r.bold) for r in _paragraph(doc, "•\tthe church").runs] == [("•\t", None), ("the church", None)]
+    assert [(r.bold, r.font.size) for r in _paragraph(doc, "Amen").runs] == [(True, Pt(13))]
+
+
 # --- the printed bulletin and the email ---
 
 @pytest.fixture
@@ -317,6 +365,10 @@ def test_the_printed_bulletin_reads_the_marks_in_pdf_and_word(church):
     # The printed bulletin's box headings: 12 pt and 11 pt (the owner's answer 1 of 2026-10-25).
     assert [(r.bold, r.font.size) for r in _paragraph(word, "For the world").runs] == [(True, Pt(12))]
     assert [(r.bold, r.font.size) for r in _paragraph(word, "Near").runs] == [(True, Pt(11))]
+    # A heading stays with what follows it (printed_docx._KEEP_WITH_NEXT), as the PDF's does (printed_pdf.KEEP).
+    assert _paragraph(word, "For the world").paragraph_format.keep_with_next
+    assert _paragraph(word, "Near").paragraph_format.keep_with_next
+    assert not _paragraph(word, "We pray for peace and justice.").paragraph_format.keep_with_next
     item = _paragraph(word, "•\tthe sick")
     assert (item.paragraph_format.left_indent, item.paragraph_format.first_line_indent) == (Inches(0.25),
                                                                                            Inches(-0.25))
