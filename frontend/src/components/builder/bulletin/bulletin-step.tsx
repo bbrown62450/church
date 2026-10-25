@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "r
 import { toast } from "sonner";
 
 import { PendingButton } from "@/components/app/pending-button";
+import { FormattingHelp } from "@/components/builder/formatting-help";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -493,6 +494,9 @@ function Announcements() {
     <Group id="bulletin-announcements" title="Announcements">
       {ANNOUNCEMENTS.map(({ key, label, long }) => {
         const note = `bulletin-${key}-carried`;
+        // The free texts read formatting marks (formatting spec); the names do not.
+        const help = long ? `bulletin-${key}-formatting` : null;
+        const describedBy = [draft.bulletin.carried.includes(key) ? note : null, help].filter(Boolean).join(" ");
         return (
           <div key={key} className="grid gap-2">
             <TextField
@@ -501,9 +505,10 @@ function Announcements() {
               value={draft.bulletin.announcements[key]}
               maxLength={MAX_LENGTH[key]}
               long={long}
-              describedBy={draft.bulletin.carried.includes(key) ? note : undefined}
+              describedBy={describedBy || undefined}
               onChange={(v) => update((d) => setAnnouncement(d, key, v))}
             />
+            {help ? <FormattingHelp id={help} /> : null}
             <CarriedNote id={note} carryKey={key} name={label.toLowerCase()} fieldId={`bulletin-${key}`} />
           </div>
         );

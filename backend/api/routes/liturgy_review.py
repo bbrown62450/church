@@ -15,6 +15,10 @@ amendment "Routes"; F §1.5, §1.8).
   usecase charges the `ai` bucket 1 through `charge`, only when it calls the
   AI (a 429 then); AI failures are 503, 504, 502; no voice turned on is 422.
 
+The reviewer and the pews read each card's words as printed, without
+formatting marks (formatting spec, "AI interplay"; `_cards`); Revise gets
+the text as typed, marks and all.
+
 The rubric, the system prompt and the voice profile are read on the server,
 never taken from the client. Plain `def` routes (F §1.8), no SQL and no
 try/except (F §2.2 rule 1). Request models at the top, `extra="forbid"`.
@@ -24,6 +28,7 @@ from typing import Annotated, Literal, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+import formatting
 from api import ratelimit
 from api.deps import ActiveChurch, CurrentUser, get_current_user, require_church
 from api.errors import error_responses
@@ -128,6 +133,12 @@ def _sermon(sermon_text: Optional[SermonText]) -> Optional[tuple[str, str]]:
     return (sermon_text.ref, sermon_text.text) if sermon_text else None
 
 
+def _cards(payload: "ReviewIn") -> list[liturgy_review.ReviewCard]:
+    return [liturgy_review.ReviewCard(c.section, c.origin,
+                                      formatting.plain(c.text, inline_only=c.section in formatting.INLINE_ONLY))
+            for c in payload.cards]
+
+
 def _note(note) -> NoteOut:
     return NoteOut(tag=note.tag, text=note.text, source=note.source)
 
@@ -140,8 +151,7 @@ def review_service(payload: ReviewIn, church: ActiveChurch = Depends(require_chu
     only when the AI is called (40 per 10 min per user, 400 per day per church)."""
     outcome = liturgy_review.review_service(
         church_id=church.id, user_id=user.id, occasion=payload.occasion, scriptures=payload.scriptures,
-        cards=[liturgy_review.ReviewCard(c.section, c.origin, c.text) for c in payload.cards],
-        sermon=_sermon(payload.sermon_text),
+        cards=_cards(payload), sermon=_sermon(payload.sermon_text),
         charge=lambda n: ratelimit.consume("ai", user_id=user.id, church_id=church.id, cost=n))
     return ReviewOut(cards=[CardNotesOut(section=c.section, notes=[_note(n) for n in c.notes])
                             for c in outcome.cards],
@@ -168,8 +178,7 @@ def hear_from_the_pews(payload: ReviewIn, church: ActiveChurch = Depends(require
     request, only when the AI is called (40 per 10 min per user, 400 per day per church)."""
     voices = pew_voices.hear_from_the_pews(
         church_id=church.id, user_id=user.id, occasion=payload.occasion, scriptures=payload.scriptures,
-        cards=[liturgy_review.ReviewCard(c.section, c.origin, c.text) for c in payload.cards],
-        sermon=_sermon(payload.sermon_text),
+        cards=_cards(payload), sermon=_sermon(payload.sermon_text),
         charge=lambda n: ratelimit.consume("ai", user_id=user.id, church_id=church.id, cost=n))
     return PewsOut(voices=[PewVoiceReactionsOut(
         description=v.description,

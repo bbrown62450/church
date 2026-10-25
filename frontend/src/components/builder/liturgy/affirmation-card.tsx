@@ -3,6 +3,7 @@
 import { ChevronDownIcon } from "lucide-react";
 import { useRef, useState } from "react";
 
+import { FormattingHelp } from "@/components/builder/formatting-help";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -127,7 +128,9 @@ export function AffirmationCard({ config, maxLength }: { config: AffirmationConf
                 maxLength={maxLength}
                 rows={4}
                 className="max-h-[60vh] overflow-y-auto"
-                aria-describedby={showCounter ? "affirmation-hint affirmation-count" : "affirmation-hint"}
+                aria-describedby={
+                  showCounter ? "affirmation-hint affirmation-count affirmation-formatting" : "affirmation-hint affirmation-formatting"
+                }
                 onChange={(e) => update((d) => editAffirmationText(d, e.target.value))}
               />
               {showCounter ? (
@@ -138,6 +141,7 @@ export function AffirmationCard({ config, maxLength }: { config: AffirmationConf
               <p id="affirmation-hint" className="text-sm text-muted-foreground">
                 {a.text.trim() === "" ? `${OWN_TEXT_HINT} ${OWN_TEXT_BLANK}` : OWN_TEXT_HINT}
               </p>
+              <FormattingHelp id="affirmation-formatting" />
             </div>
           ) : chosen ? (
             <Collapsible open={open} onOpenChange={setOpen} className="grid gap-2">

@@ -23,24 +23,33 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
+import formatting
 import printed_bulletin as pb
 import printed_pdf
+from worship_service import append_paragraph
 
 FONT = "Times New Roman"
 TEXT_WIDTH = Inches(6)                   # 7 in less two 0.5 in margins
 
 _ALIGN = {"header": WD_ALIGN_PARAGRAPH.CENTER, "section": WD_ALIGN_PARAGRAPH.CENTER,
           "title": WD_ALIGN_PARAGRAPH.CENTER, "box": WD_ALIGN_PARAGRAPH.CENTER,
-          "contact": WD_ALIGN_PARAGRAPH.CENTER, "center": WD_ALIGN_PARAGRAPH.CENTER}
-_SPACE_BEFORE = {"element": 8, "section": 12, "note": 10, "credit": 4, "center": 3}
-_SIZE = {"title": 28, "credit": 9, "contact": 12}
+          "contact": WD_ALIGN_PARAGRAPH.CENTER, "center": WD_ALIGN_PARAGRAPH.CENTER,
+          "center_heading1": WD_ALIGN_PARAGRAPH.CENTER, "center_heading2": WD_ALIGN_PARAGRAPH.CENTER}
+_SPACE_BEFORE = {"element": 8, "section": 12, "note": 10, "credit": 4, "center": 3,
+                 "heading1": 6, "heading2": 6, "center_heading1": 6, "center_heading2": 6}
+# A box's own headings (formatting spec; the owner's answer 1 of 2026-10-25): bold 12 pt and 11 pt in the
+# case typed, under the element's 11 pt bold capitals (printed_pdf.STYLES says why that order holds).
+_SIZE = {"title": 28, "credit": 9, "contact": 12,
+         "heading1": 12, "heading2": 11, "center_heading1": 12, "center_heading2": 11}
+# Formatting (formatting spec): a heading stays with what follows it; an item hangs after its marker.
+_KEEP_WITH_NEXT = {"element", "heading1", "heading2", "center_heading1", "center_heading2"}
 # The w:sectPr children that follow w:pgNumType (ECMA-376 CT_SectPr).
 _AFTER_PG_NUM_TYPE = ("w:cols", "w:formProt", "w:vAlign", "w:noEndnote", "w:titlePg", "w:textDirection", "w:bidi",
                       "w:rtlGutter", "w:docGrid", "w:printerSettings", "w:sectPrChange")
 
 
 def _add_line(doc, line: pb.Line):
-    p = doc.add_paragraph()
+    p = append_paragraph(doc)       # a box's blocks can be thousands of lines (formatting spec)
     fmt = p.paragraph_format
     fmt.space_after = Pt(4 if line.style == "section" else 0)
     fmt.space_before = Pt(_SPACE_BEFORE.get(line.style, 0))
@@ -50,8 +59,14 @@ def _add_line(doc, line: pb.Line):
         fmt.left_indent, fmt.first_line_indent = Inches(0.5), Inches(-0.5)
     elif line.style == "indent":
         fmt.left_indent = Inches(0.5)
-    if line.style == "element":
+    elif line.style == "item":
+        hang = Pt(formatting.hanging_points(line.marker))
+        fmt.left_indent, fmt.first_line_indent = hang, -hang
+    if line.style in _KEEP_WITH_NEXT:
         fmt.keep_with_next = True
+    if line.marker:
+        # Word's hanging indent is the tab's stop; the marker bold in a box all bold (the Word copy's too).
+        p.add_run(line.marker + "\t").bold = line.marker_bold or None
     for span in line.spans:
         run = p.add_run(span.text)
         run.bold, run.italic = span.bold or None, span.italic or None

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
+import { FORMATTING_HELP } from "@/components/builder/formatting-help";
 import { Toaster } from "@/components/ui/sonner";
 import type { ReviewBody, ReviseBody } from "@/lib/api/types";
 import { draftKey, type DraftV1, type SectionKey } from "@/lib/draft/schema";
@@ -159,7 +160,7 @@ describe("Review service (R User experience)", () => {
     expect(within(box).getByText('Several prayers open with "Gracious God".')).toBeInTheDocument();
     expect(within(box).getByText("Repetition")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Benediction" })).toHaveAccessibleDescription(
-      "Your church's default benediction. Admins can change it in Settings.",
+      `Your church's default benediction. Admins can change it in Settings. ${FORMATTING_HELP}`,
     );
     expect(screen.queryByText(QUICK)).toBeNull();
     expect(reviewButton()).toHaveFocus(); // focus stays on the one button

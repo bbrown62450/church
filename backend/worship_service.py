@@ -14,6 +14,7 @@ from collections.abc import Mapping, Sequence
 from typing import Dict, Any, List, Optional
 from io import BytesIO
 
+import formatting
 from affirmation import CHOICE_LABELS, Affirmation
 from liturgy_config import ASSURANCE_RESPONSE, COMMUNION_BLOCKS
 from service_output import hymn_line
@@ -23,10 +24,80 @@ logger = logging.getLogger(__name__)
 # Optional import for docx
 try:
     from docx import Document
-    from docx.shared import Pt
+    from docx.shared import Inches, Pt
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.text.paragraph import Paragraph
 except ImportError:
     Document = None
+
+
+def append_paragraph(doc):
+    """doc.add_paragraph() in constant time (formatting plan, review fixes):
+    python-docx finds the body's closing w:sectPr by reading every paragraph
+    before it, so a file of tens of thousands of list items took most of a
+    minute. The same empty paragraph, put right before that w:sectPr."""
+    body = doc.element.body
+    p = OxmlElement("w:p")
+    try:
+        last = body[-1]
+    except IndexError:
+        last = None
+    if last is not None and last.tag == qn("w:sectPr"):
+        last.addprevious(p)
+    else:
+        body.append(p)
+    return Paragraph(p, doc)
+
+
+# A box's own headings (formatting spec): bold Times, these sizes, never Word's
+# Heading styles (the section's own heading is Heading 2).
+HEADING_POINTS = {"heading1": 13, "heading2": 12}
+
+
+def _runs(p, text: str, *, bold: bool = False) -> None:
+    """text as runs of p: bold and italic marks read (formatting.inline); text
+    without a mark is one run, as add_paragraph(text) makes."""
+    spans = formatting.inline(text) if formatting.has_marks(text, inline_only=True) else (formatting.Span(text),)
+    for span in spans:
+        run = p.add_run(span.text)
+        if bold or span.bold:
+            run.bold = True
+        if span.italic:
+            run.italic = True
+
+
+def _add_text(doc, text: str, *, bold: bool = False) -> None:
+    """A box's text (formatting spec). Without a mark, one paragraph exactly
+    as before (its line breaks kept); otherwise a paragraph per block: a
+    heading bold at HEADING_POINTS, kept with the next; an item with its
+    marker and a hanging indent (0.25 in, 0.375 in after
+    a number: formatting.hanging_points); text with its line breaks."""
+    if not formatting.has_marks(text):
+        if bold:
+            doc.add_paragraph().add_run(text).bold = True
+        else:
+            doc.add_paragraph(text)
+        return
+    for block in formatting.parse(text):
+        p = append_paragraph(doc)
+        heading = block.kind in HEADING_POINTS
+        if heading:
+            p.paragraph_format.space_before = Pt(6)
+            p.paragraph_format.keep_with_next = True
+        if block.kind == "item":
+            hang = Pt(formatting.hanging_points(block.marker))
+            p.paragraph_format.left_indent, p.paragraph_format.first_line_indent = hang, -hang
+            p.add_run(block.marker + "\t").bold = bold or None
+        for span in block.spans:
+            run = p.add_run(span.text)
+            if bold or heading or span.bold:
+                run.bold = True
+            if span.italic:
+                run.italic = True
+            if heading:
+                run.font.size = Pt(HEADING_POINTS[block.kind])
 
 
 def _add_leader_people_paragraph(doc, text: str) -> None:
@@ -46,8 +117,9 @@ def _add_leader_people_paragraph(doc, text: str) -> None:
         content = text[m.end() : content_end].strip()
         parts.append((role, content))
         pos = content_end
+    # Bold and italic marks read in each part (formatting spec; _runs: without one, as before).
     if not parts:
-        doc.add_paragraph(text)
+        _runs(doc.add_paragraph(), text)
         return
     for role, content in parts:
         if not content and role == "":
@@ -55,12 +127,11 @@ def _add_leader_people_paragraph(doc, text: str) -> None:
         if role == "People":
             p = doc.add_paragraph()
             p.add_run("People: ")
-            r = p.add_run(content)
-            r.bold = True
+            _runs(p, content, bold=True)
         else:
             line = ("Leader: " + content) if role == "Leader" else content
             if line:
-                doc.add_paragraph(line)
+                _runs(doc.add_paragraph(), line)
 
 
 def _add_communion_liturgy(doc) -> None:
@@ -96,7 +167,7 @@ def _add_assurance_paragraph(doc, leader_text: str) -> None:
     if leader_clean.startswith("Leader:"):
         leader_clean = leader_clean[7:].strip()
     if leader_clean:
-        doc.add_paragraph("Leader: " + leader_clean)
+        _runs(doc.add_paragraph(), "Leader: " + leader_clean)
     # Always add the congregational response
     p = doc.add_paragraph()
     r = p.add_run(ASSURANCE_RESPONSE)
@@ -113,7 +184,7 @@ def _add_custom_elements_after(
         if ce.get("insert_after") == anchor and ce.get("label"):
             doc.add_paragraph(ce["label"], style="Heading 2")
             if ce.get("text"):
-                doc.add_paragraph(ce["text"])
+                _add_text(doc, ce["text"])
             doc.add_paragraph()
 
 
@@ -158,6 +229,8 @@ def build_docx(
     The Affirmation of Faith (affirmation spec; None is the Apostles' Creed,
     as before) prints the creed's name, or own text as typed, and nothing
     when switched off or own text is blank.
+    Each box's text reads the formatting marks (formatting spec, _add_text,
+    _runs); text without a mark prints exactly as before.
     Returns the .docx bytes.
     """
     if not Document:
@@ -193,7 +266,7 @@ def build_docx(
     # 2. Opening Prayer
     if liturgy.get("opening_prayer"):
         doc.add_paragraph("Opening Prayer", style="Heading 2")
-        doc.add_paragraph(liturgy["opening_prayer"])
+        _add_text(doc, liturgy["opening_prayer"])
         doc.add_paragraph()
     _add_custom_elements_after(doc, "opening_prayer", custom)
 
@@ -204,8 +277,7 @@ def build_docx(
     # 4. Prayer of Confession (bold)
     if liturgy.get("prayer_of_confession"):
         doc.add_paragraph("Prayer of Confession", style="Heading 2")
-        p = doc.add_paragraph()
-        p.add_run(liturgy["prayer_of_confession"]).bold = True
+        _add_text(doc, liturgy["prayer_of_confession"], bold=True)
         doc.add_paragraph()
     _add_custom_elements_after(doc, "prayer_of_confession", custom)
 
@@ -219,7 +291,7 @@ def build_docx(
     # 6. Prayer for Illumination
     if liturgy.get("prayer_for_illumination"):
         doc.add_paragraph("Prayer for Illumination", style="Heading 2")
-        doc.add_paragraph(liturgy["prayer_for_illumination"])
+        _add_text(doc, liturgy["prayer_for_illumination"])
         doc.add_paragraph()
     _add_custom_elements_after(doc, "prayer_for_illumination", custom)
 
@@ -248,7 +320,10 @@ def build_docx(
     faith = affirmation or Affirmation()
     if faith.prints():
         doc.add_paragraph("Affirmation of Faith", style="Heading 2")
-        doc.add_paragraph(faith.text if faith.choice == "own" else CHOICE_LABELS[faith.choice])
+        if faith.choice == "own":
+            _add_text(doc, faith.text)
+        else:
+            doc.add_paragraph(CHOICE_LABELS[faith.choice])
         doc.add_paragraph()
     _add_custom_elements_after(doc, "affirmation_of_faith", custom)
 
@@ -264,14 +339,14 @@ def build_docx(
     # 12. Prayers of the People (the pastor's copy only)
     if include_prayers_of_the_people and liturgy.get("prayers_of_the_people"):
         doc.add_paragraph("Prayers of the People", style="Heading 2")
-        doc.add_paragraph(liturgy["prayers_of_the_people"])
+        _add_text(doc, liturgy["prayers_of_the_people"])
         doc.add_paragraph()
     _add_custom_elements_after(doc, "prayers_of_the_people", custom)
 
     # 13. Offertory Prayer
     if liturgy.get("offertory_prayer"):
         doc.add_paragraph("Offertory Prayer", style="Heading 2")
-        doc.add_paragraph(liturgy["offertory_prayer"])
+        _add_text(doc, liturgy["offertory_prayer"])
         doc.add_paragraph()
     _add_custom_elements_after(doc, "offertory_prayer", custom)
 
@@ -283,7 +358,7 @@ def build_docx(
     # Benediction
     if liturgy.get("benediction"):
         doc.add_paragraph("Benediction", style="Heading 2")
-        doc.add_paragraph(liturgy["benediction"])
+        _add_text(doc, liturgy["benediction"])
 
     _add_custom_elements_after(doc, "end", custom)  # At the end (after Benediction)
 
