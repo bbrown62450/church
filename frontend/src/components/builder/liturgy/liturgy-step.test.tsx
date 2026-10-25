@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
+import { DIALOGUE_HELP } from "@/components/builder/formatting-help";
 import ReviewStepPage from "@/app/(signed-in)/(church)/builder/review/page";
 import { Toaster } from "@/components/ui/sonner";
 import type { GenerateLiturgyBody } from "@/lib/api/types";
@@ -196,12 +197,12 @@ describe("the Liturgy step (S User experience)", () => {
     expect(within(card("Prayer of Confession")).getByText("Printed in bold for everyone to read together.")).toBeInTheDocument();
     expect(within(card("Assurance of Pardon")).getByText("People: Thanks be to God! Amen.")).toBeInTheDocument();
     expect(within(card("Assurance of Pardon")).getByText("Added automatically after your text.")).toBeInTheDocument();
-    // The hints are the fields' descriptions.
+    // The hints, then the formatting help (formatting spec), are the fields' descriptions.
     expect(screen.getByRole("textbox", { name: "Call to Worship" })).toHaveAccessibleDescription(
-      "Start lines with “Leader:” or “People:”. People lines print in bold.",
+      `Start lines with “Leader:” or “People:”. People lines print in bold. ${DIALOGUE_HELP}`,
     );
     expect(screen.getByRole("textbox", { name: "Assurance of Pardon" })).toHaveAccessibleDescription(
-      "People: Thanks be to God! Amen. Added automatically after your text.",
+      `People: Thanks be to God! Amen. Added automatically after your text. ${DIALOGUE_HELP}`,
     );
     const prayers = card("Prayers of the People");
     expect(within(prayers).getByText("Pastor's copy only")).toBeInTheDocument();

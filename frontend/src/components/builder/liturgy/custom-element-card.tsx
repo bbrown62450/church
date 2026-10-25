@@ -3,6 +3,7 @@
 import { EllipsisIcon } from "lucide-react";
 import { useRef } from "react";
 
+import { FormattingHelp } from "@/components/builder/formatting-help";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -99,8 +100,10 @@ export function CustomElementCard({
           value={element.text}
           maxLength={limits.max_custom_text}
           className="max-h-[60vh] overflow-y-auto"
+          aria-describedby={`custom-${id}-formatting`}
           onChange={(event) => edit({ text: event.target.value })}
         />
+        <FormattingHelp id={`custom-${id}-formatting`} />
       </div>
       <div className="grid gap-1.5">
         <Label id={`custom-${id}-place`}>Place</Label>

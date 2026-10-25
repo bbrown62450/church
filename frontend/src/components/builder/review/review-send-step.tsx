@@ -9,6 +9,7 @@ import { EditingBanner } from "./editing-banner";
 import { EmailCard } from "./email-card";
 import { PrintedCard } from "./printed-card";
 import { SaveCard } from "./save-card";
+import { TextPreviewCard } from "./text-preview-card";
 
 /**
  * Step 5, Review & send (slice 5a spec, UX "Review step"; owner answers 1 and
@@ -16,7 +17,9 @@ import { SaveCard } from "./save-card";
  * service, "Still to do" (each gap a link to fix it), the Archive card (save,
  * start a new service; 5a-3), the Word documents, and the printed bulletin
  * (printed bulletin spec, PR 1), and emailing the bulletin (slice 5b-2). No
- * order-of-worship preview: the Liturgy step already shows the order.
+ * order-of-worship preview: the Liturgy step already shows the order; the
+ * text preview (formatting spec) shows each box's text as it prints, before
+ * the downloads.
  */
 export function ReviewSendStep() {
   const church = useChurch();
@@ -27,6 +30,7 @@ export function ReviewSendStep() {
       <StillNeeded />
       {/* The builder shows a step only once the profile has loaded (BuilderShell). */}
       {profile.data ? <SaveCard church={profile.data} /> : null}
+      <TextPreviewCard />
       <DocumentsCard />
       <PrintedCard />
       <EmailCard />

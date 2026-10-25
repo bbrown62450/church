@@ -154,6 +154,7 @@ describe("Review & send: the Word documents (slice 5a-1)", () => {
     expect(within(step).getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
       "Still to do",
       "Archive",
+      "Text preview",
       "Word documents",
       "Printed bulletin",
       "Email the bulletin",

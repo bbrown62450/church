@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { PendingButton } from "@/components/app/pending-button";
+import { FormattingHelp } from "@/components/builder/formatting-help";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import {
   setCardEnabled,
   type CardOrigin,
 } from "@/lib/liturgy/cards";
+import { INLINE_ONLY } from "@/lib/formatting";
 import { useLiturgyGeneration } from "@/lib/liturgy/generation";
 import { useLiturgyReview } from "@/lib/liturgy/review";
 import { useAutosize } from "@/lib/use-autosize";
@@ -178,6 +180,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
       hint ? `card-${key}-hint` : null,
       key === "assurance" ? `card-${key}-response` : null,
       showCounter ? `card-${key}-count` : null,
+      `card-${key}-formatting`,
       notesShown ? notesId(key) : null,
       error ? `card-${key}-error` : null,
     ]
@@ -372,6 +375,7 @@ export function SectionCard({ spec, assuranceResponse, defaultBenediction, maxLe
               {card.text.length.toLocaleString("en-US")} / {maxLength.toLocaleString("en-US")}
             </p>
           ) : null}
+          <FormattingHelp id={`card-${key}-formatting`} dialogue={INLINE_ONLY.has(key)} />
           {key === "assurance" ? (
             <div id={`card-${key}-response`} className="grid gap-0.5 text-sm">
               <p className="font-medium">{assuranceResponse}</p>

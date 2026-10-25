@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
+import { FORMATTING_HELP } from "@/components/builder/formatting-help";
 import { Toaster } from "@/components/ui/sonner";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
 import { installFakeApi, type FakeHandler } from "@/test/fake-api";
@@ -111,10 +112,10 @@ describe("the Affirmation of Faith card (affirmation spec)", () => {
     const region = await card();
     await user.click(within(region).getByRole("radio", { name: "Your own text" }));
     const box = within(region).getByRole("textbox", { name: "Your own text" });
-    expect(box).toHaveAccessibleDescription(`${OWN_TEXT_HINT} ${OWN_TEXT_BLANK}`);
+    expect(box).toHaveAccessibleDescription(`${OWN_TEXT_HINT} ${OWN_TEXT_BLANK} ${FORMATTING_HELP}`);
     expect(box).toHaveAttribute("maxlength", "20000");
     await user.type(box, OWN);
-    expect(box).toHaveAccessibleDescription(OWN_TEXT_HINT);
+    expect(box).toHaveAccessibleDescription(`${OWN_TEXT_HINT} ${FORMATTING_HELP}`);
     await waitFor(() => expect(stored().liturgy.affirmation).toEqual({ include: true, choice: "own", text: OWN, origin: "user" }));
     await user.click(within(region).getByRole("button", { name: "Use church default" }));
     await waitFor(() => expect(within(region).getByRole("switch", { name: TITLE })).toHaveFocus());
@@ -138,7 +139,7 @@ describe("the Affirmation of Faith card (affirmation spec)", () => {
     const region = await card();
     box = within(region).getByRole("textbox", { name: "Your own text" });
     expect(within(region).getByText("18,001 / 20,000")).toBeInTheDocument();
-    expect(box).toHaveAccessibleDescription(`${OWN_TEXT_HINT} 18,001 / 20,000`);
+    expect(box).toHaveAccessibleDescription(`${OWN_TEXT_HINT} 18,001 / 20,000 ${FORMATTING_HELP}`);
   });
 
   it("follows a church whose default is its own text", async () => {
