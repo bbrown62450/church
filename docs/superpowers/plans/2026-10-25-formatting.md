@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ] `) syntax for tracking.
 
-**Goal:** Ship the owner's formatting decisions 3 to 5 of 2026-10-24 (binding): bold, italic, two heading sizes, line breaks and simple lists, typed as markdown, in the Word copies, the printed bulletin (PDF and Word) and so the emailed bulletin's attachments; a "Formatting" help line under each box; a text preview on the Review step; "People:" lines in the Call to Worship still bold. Text saved before the change prints exactly as before. **One PR** (S "Deploy order: one PR"): no API change, no migration, no new package.
+**Goal:** Ship the owner's formatting decisions 3 to 5 of 2026-10-24 (binding): bold, italic, two heading sizes, line breaks and simple lists, typed as markdown, in the Word copies, the printed bulletin (PDF and Word) and so the emailed bulletin's attachments; a "Formatting" help line under each box; a text preview on the Review step; "People:" lines in the Call to Worship still bold. Saved text with no formatting marks prints exactly as before; saved text with marks now prints formatted, and the preview shows it first (the owner accepted this: answer 3 of 2026-10-25). **One PR** (S "Deploy order: one PR"): no API change, no migration, no new package.
 
-**Architecture:** T1, the server: a pure module `backend/formatting.py` (the grammar: `parse`, `inline`, `has_marks`, `plain`), read by the printed bulletin's data (`printed_bulletin.formatted`, `_spans`, so `printed_pdf` and `printed_docx` with five new line styles), the Word copy (`worship_service._add_text`, `_runs`), the reviewer's and the pews' routes (`formatting.plain`) and Revise's instruction (keep the marks). The shared fixture `backend/tests/fixtures/shared/formatting.json` is the printed bulletin's own output for 26 cases. T2, the pages: `frontend/src/lib/formatting.ts` (the same grammar and the printed bulletin's rules, passing the same fixture), `FormattingHelp` under the boxes, and `TextPreviewCard` on the Review step. T3 planted violations, T4 verification, T5 the pre-merge note, the draft PR, CI, the merge, the after-deploy check, the phone check and the record.
+**Architecture:** T1, the server: a pure module `backend/formatting.py` (the grammar: `parse`, `inline`, `has_marks`, `plain`), read by the printed bulletin's data (`printed_bulletin.formatted`, `_spans`, so `printed_pdf` and `printed_docx` with five new line styles), the Word copy (`worship_service._add_text`, `_runs`; `append_paragraph` adds Word paragraphs in constant time for both Word files), the reviewer's and the pews' routes (`formatting.plain`) and Revise's instruction (keep the marks). The shared fixture `backend/tests/fixtures/shared/formatting.json` is the printed bulletin's own output for 35 cases, and `formatting_fuzz.json` for 300 seeded random texts (generated in Step 4). T2, the pages: `frontend/src/lib/formatting.ts` (the same grammar and the printed bulletin's rules, passing the same fixture), `FormattingHelp` under the boxes, and `TextPreviewCard` on the Review step. T3 planted violations, T4 verification, T5 the pre-merge note, the draft PR, CI, the merge, the after-deploy check, the phone check and the record.
 
 **Tech Stack:** FastAPI, python-docx, reportlab, pytest (backend); Next.js 16, React 19, Tailwind 4, Base UI, Vitest with Testing Library (frontend).
 
@@ -38,32 +38,36 @@ As in the earlier plans: **Create `path`:** the block is the whole new file; **I
 
   | After | Local `backend/tests` | Frontend |
   |---|---|---|
-  | T1 | +76 (`test_formatting.py`, a new file) → **2367 passed, 50 skipped** | unchanged |
-  | T2 | unchanged | +10 (`formatting.test.ts` 4, `formatting-help.test.tsx` 3, `text-preview-card.test.tsx` 3, new files) → **1158 passed in 125 files** |
+  | T1 | +99 (`test_formatting.py`, a new file) → **2390 passed, 50 skipped** | unchanged |
+  | T2 | unchanged | +14 (`formatting.test.ts` 5, `formatting-help.test.tsx` 3, `text-preview-card.test.tsx` 6, new files) → **1162 passed in 125 files** |
 
   | CI on | `backend` job | `backend-postgres` job | `frontend` job |
   |---|---|---|---|
   | `main` before | 2322 passed, 50 skipped | 50 passed, 2322 deselected | 1148 in 122 files |
-  | this PR | **2398 passed, 50 skipped** | **50 passed, 2398 deselected** | **1158 in 125 files** |
+  | this PR | **2421 passed, 50 skipped** (2390 and `streamlit_tests`' 31) | **50 passed, 2421 deselected** | **1162 in 125 files** |
 
 ## Owner decisions
 
 1. **The formatting decisions of 2026-10-24** (D 3 to 5; "all recommended"; binding): a chosen set, not full markdown (bold, italic, two heading sizes, line breaks, simple lists) in the Word file(s), the printed bulletin and the emailed bulletin; typed as markdown with a short help line under each box and a preview on the Review step (a toolbar may come later); a "People:" line still prints entirely in bold by default and `**...**` bolds part of a line; no links, images, tables or code blocks. This comes after the Affirmation of Faith (done: PR #64, #65) and before the em-dash follow-up PR and Theme PR 2 (D 6).
 2. **Standing permission** for safety and reliability fixes with no owner-visible change (carried). Each use is a numbered clarification.
+3. **The owner's answers of 2026-10-25** ("all recommended"; binding; D's addendum "Formatting: the owner's answers", S "The owner's answers"): (1) headings inside a box print bold at **12 pt and 11 pt in the printed bulletin** (PDF and Word), in the case typed, under its 11 pt bold capital element headings (the 11 pt one matches their size and differs by not being in capitals), and at **13 pt and 12 pt in the Word copy**, under its section headings; (2) "People:" lines outside the Call to Worship keep printing as typed, as today, and only the Call to Worship bolds People lines (D 5 clarified: its wording had assumed bold everywhere); (3) old text: **the change is accepted**. The owner's read-only count: 31 saved services, none with list-like lines in a prayer or a custom element, none in a bulletin, one with an asterisk before a letter. Text with no formatting marks prints exactly as before; text with marks ("- x", "1. x", `*word*`, a line starting `#`, a backslash before one of those) now formats; the preview shows it; `\*` keeps a literal asterisk (S "Changes to old text").
 
 ## Spec clarifications
 
 The owner's decisions win over S; the code wins over both where they disagree. **[owner-visible]** items change what someone sees compared with a plain reading of the decisions.
 
-1. **[owner-visible] "People:" bold where it is today.** D 5's "still" is read as: the Call to Worship keeps printing People lines in bold (the only box that splits them today); other boxes print a "People:" line as typed, as today (S Questions, 2).
+1. **[owner-visible] "People:" bold where it is today.** D 5's "still" is read as: the Call to Worship keeps printing People lines in bold (the only box that splits them today); other boxes print a "People:" line as typed, as today (the owner's answer 2; a fixture case pins it).
 2. **[owner-visible] The dialogue boxes take bold and italic only.** The Call to Worship and the Assurance of Pardon split Leader and People parts anywhere in the text, as today; a heading or list there would cut across a part, so `#` and `- ` print as typed in those two. Their help line says so by naming only bold and italic.
-3. **[owner-visible] Headings are bold Times, 13 pt and 12 pt, never Word's Heading styles** (S "Headings and the section's own heading"; S Questions, 1).
+3. **[owner-visible] Headings are bold Times, never Word's Heading styles: 12 pt and 11 pt in the printed bulletin, 13 pt and 12 pt in the Word copy** (S "Headings and the section's own heading"; the owner's answer 1). In the printed bulletin a box's heading keeps the case typed under the element's 11 pt capitals; in the PDF it moves to the next page with two lines (`KEEP`, centered headings too).
 4. **[owner-visible] Numbers stay as typed.** "3." prints "3."; nothing is renumbered.
 5. **[owner-visible] Pasted reading text, names, music titles, the sermon title and Settings fields are not formatted** (S "Which boxes").
 6. **The preview mirrors the printed bulletin** (its People label bold, the Affirmation's own text bold); the Word copy differs only where it already does (the People label plain, own Affirmation text plain).
 7. **No library** (S "No migration, no new dependency").
 8. **The reviewer and the pews read the words without marks; Revise keeps them; generation is unchanged** (S "AI interplay").
-9. **Linear scan** (standing permission, safety): the first build's scan looked for each opener's close from scratch, quadratic on a 20,000-character line of unclosed marks; the plan's code finds each kind's next close in one pass, and a test holds it under a second.
+9. **Linear scan** (standing permission, safety): the first build's scan looked for each opener's close from scratch, quadratic on a 20,000-character line of unclosed marks; the plan's code finds each kind's next close in one pass, and a test holds it under a second (the preview's at five times the limit, where a quadratic scan takes seconds: F9).
+10. **[owner-visible] Changes to old text** (the owner's answer 3): saved text with a mark now prints formatted; `test_old_text_with_a_mark_now_prints_formatted` pins "- x", "1. x", `*word*`, `**word**`, a dashed announcement and the escapes, and `test_an_old_dashed_list_now_prints_as_a_list_in_the_word_copy` the Word copy; the old-text corpus tests keep text with no mark identical.
+11. **Word paragraphs in constant time** (standing permission, reliability): python-docx's `add_paragraph` reads the whole body each time, so every box at its limit full of one-word list items took the printed Word file 55 s and the Word copy 52 s; `worship_service.append_paragraph` adds the same empty paragraph before the body's `w:sectPr` (21.8 s and 16.2 s; the old-text tests prove the XML unchanged). The PDF's measured cost is in S "Limits": 20.6 s for that extreme (39.7 s before this change), about a minute for the same extreme of headings alone, accepted (the code before was slower still there; nothing is saved by a request the browser gives up on).
+12. **The preview cleans text as the server does** (standing permission): a vertical tab and a form feed become line breaks and `archive._XML_BAD` goes before trimming (`serverStrip`, F10), and an item's marker column widens for a long number ("100.").
 
 ### Assumptions that turned out false while planning
 - "Line breaks" are not new: the Word copy and the printed bulletin already print a box's line breaks (python-docx turns `\n` into a break; the PDF turns it into `<br/>`). Formatting keeps that and adds blocks.
@@ -76,17 +80,17 @@ The owner's decisions win over S; the code wins over both where they disagree. *
 - A Turbopack build fails when `frontend/node_modules` is a symlink; a hard-linked copy works (replay only).
 
 ### Risks
-In S "Risks". For this plan: a reviewer may read old text with a typed "- " list printing as a list as a regression; it is the feature (D 3), and the record notes it if the owner sees it.
+In S "Risks". For this plan: a reviewer may read old text with a typed "- " list printing as a list as a regression; the owner accepted it (answer 3; clarification 10), and the record notes it if the owner sees it.
 
 ## File Structure
 
-**Created:** `backend/formatting.py`, `backend/tests/test_formatting.py`, `backend/tests/fixtures/shared/formatting.json`, `frontend/src/lib/formatting.ts`, `frontend/src/lib/formatting.test.ts`, `frontend/src/components/builder/formatting-help.tsx`, `frontend/src/components/builder/formatting-help.test.tsx`, `frontend/src/components/builder/review/text-preview-card.tsx`, `frontend/src/components/builder/review/text-preview-card.test.tsx`.
+**Created:** `backend/formatting.py`, `backend/tests/test_formatting.py`, `backend/tests/fixtures/shared/formatting.json`, `backend/tests/fixtures/shared/formatting_fuzz.json` (generated, T1 Step 4), `frontend/src/lib/formatting.ts`, `frontend/src/lib/formatting.test.ts`, `frontend/src/components/builder/formatting-help.tsx`, `frontend/src/components/builder/formatting-help.test.tsx`, `frontend/src/components/builder/review/text-preview-card.tsx`, `frontend/src/components/builder/review/text-preview-card.test.tsx`.
 
 **Modified:** backend `printed_bulletin.py`, `printed_pdf.py`, `printed_docx.py`, `worship_service.py`, `usecases/liturgy_review.py`, `api/routes/liturgy_review.py`, `tests/fixtures/README.md`, and the tests `test_no_streamlit_in_core.py`, `test_usecase_liturgy_revise.py`; frontend `components/builder/liturgy/section-card.tsx`, `custom-element-card.tsx`, `affirmation-card.tsx`, `components/builder/bulletin/bulletin-step.tsx`, `components/builder/review/review-send-step.tsx`, and the tests `affirmation-card.test.tsx`, `liturgy-step.test.tsx`, `review-step.test.tsx`, `review-send-step.test.tsx`. Riding along: the spec, this plan and `docs/ops-runbook.md` (the Affirmation PR B record).
 
 ### Task 1: The grammar and what prints (S "Grammar", "Which boxes", "What prints where", "Safety", "AI interplay", "Backward compatibility", "Limits")
 
-**Files:** Create `backend/formatting.py`, `backend/tests/test_formatting.py`, `backend/tests/fixtures/shared/formatting.json`. Modify `backend/printed_bulletin.py`, `backend/printed_pdf.py`, `backend/printed_docx.py`, `backend/worship_service.py`, `backend/usecases/liturgy_review.py`, `backend/api/routes/liturgy_review.py`, `backend/tests/fixtures/README.md`, `backend/tests/test_no_streamlit_in_core.py`, `backend/tests/test_usecase_liturgy_revise.py`.
+**Files:** Create `backend/formatting.py`, `backend/tests/test_formatting.py`, `backend/tests/fixtures/shared/formatting.json`, `backend/tests/fixtures/shared/formatting_fuzz.json` (generated in Step 4). Modify `backend/printed_bulletin.py`, `backend/printed_pdf.py`, `backend/printed_docx.py`, `backend/worship_service.py`, `backend/usecases/liturgy_review.py`, `backend/api/routes/liturgy_review.py`, `backend/tests/fixtures/README.md`, `backend/tests/test_no_streamlit_in_core.py`, `backend/tests/test_usecase_liturgy_revise.py`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -197,7 +201,37 @@ The fixture's `lines` are what `printed_bulletin` prints for each case (written 
    "lines": [
     {"style": "center_heading1", "marker": "", "spans": [["This week", "b"]]},
     {"style": "center", "marker": "", "spans": [["• Tuesday: ", ""], ["Bible study", "b"]]},
-    {"style": "center", "marker": "", "spans": [["2. Choir", ""]]}]}
+    {"style": "center", "marker": "", "spans": [["2. Choir", ""]]}]},
+  {"name": "a no-break space is a space for the marks", "box": "prayer", "text": "*\u00a0not italic\u00a0*\n# \u00a0\n- \u00a0trimmed item",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["*\u00a0not italic\u00a0*\n# \u00a0", ""]]},
+    {"style": "item", "marker": "•", "spans": [["trimmed item", ""]]}]},
+  {"name": "a tab is a space for the marks", "box": "prayer", "text": "*\tnot italic\t*\n-\tnot a list\n#\tnot a heading\n- \ttrimmed item",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["*\tnot italic\t*\n-\tnot a list\n#\tnot a heading", ""]]},
+    {"style": "item", "marker": "•", "spans": [["trimmed item", ""]]}]},
+  {"name": "an indented line is text", "box": "prayer", "text": " - indented\n  1. indented\n # indented",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [[" - indented\n  1. indented\n # indented", ""]]}]},
+  {"name": "a mark after a letter does not open", "box": "prayer", "text": "a*b* c and x**y** z",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["a*b* c and x**y** z", ""]]}]},
+  {"name": "a backslash before a line's mark prints it", "box": "prayer", "text": "\\- not a list\n\\# not a heading\n1\\. not a number",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["- not a list\n# not a heading\n1. not a number", ""]]}]},
+  {"name": "dialogue with no label and a hash line", "box": "dialogue", "text": "# Gathering\nCome and **worship**.",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["# Gathering\nCome and ", ""], ["worship", "b"], [".", ""]]}]},
+  {"name": "an underscore is not a letter for the marks", "box": "prayer", "text": "snake_*case*_ and _**bold**_",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["snake_", ""], ["case", "i"], ["_ and _", ""], ["bold", "b"], ["_", ""]]}]},
+  {"name": "an underscore is a word character for the labels", "box": "dialogue", "text": "Leader: one_People: two\nPeople: three",
+   "lines": [
+    {"style": "hanging", "marker": "", "spans": [["Leader: ", ""], ["one_People: two", ""]]},
+    {"style": "hanging", "marker": "", "spans": [["People: ", "b"], ["three", "b"]]}]},
+  {"name": "a People line outside the Call to Worship prints as typed", "box": "prayer", "text": "Leader: Lord, in your mercy,\nPeople: hear our prayer.",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["Leader: Lord, in your mercy,\nPeople: hear our prayer.", ""]]}]}
  ]
 }
 ````
@@ -206,13 +240,16 @@ The fixture's `lines` are what `printed_bulletin` prints for each case (written 
 
 ````
 """Text formatting (formatting spec, 2026-10-25; owner decisions 3 to 5):
-the grammar (shared/formatting.json, which the frontend's preview passes
-too), old text printing exactly as before in every file, the Word copy, the
-printed bulletin (PDF and Word) and the email's attachments reading the
-marks, nothing typed ever becoming markup, the limits, and the reviewer and
-the pews reading the words without the marks."""
+the grammar (shared/formatting.json and the seeded shared/formatting_fuzz.json,
+which the frontend's preview passes too), old text without a mark printing
+exactly as before in every file and old text with one now formatting (the
+owner's answer 3 of 2026-10-25), the Word copy, the printed bulletin (PDF and
+Word) and the email's attachments reading the marks, nothing typed ever
+becoming markup, the limits, the reviewer and the pews reading the words
+without the marks, and Revise getting them."""
 import dataclasses
 import json
+import random
 import time
 from datetime import date
 from io import BytesIO
@@ -222,6 +259,7 @@ import pytest
 from docx import Document
 from docx.shared import Inches, Pt
 from pypdf import PdfReader
+from reportlab.platypus import CondPageBreak
 
 import affirmation as af
 import formatting
@@ -240,8 +278,10 @@ from tests.test_printed_bulletin import service
 from usecases import archive, documents
 from usecases import email as email_usecase
 
-FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "shared" / "formatting.json").read_text("utf-8"))
+SHARED = Path(__file__).parent / "fixtures" / "shared"
+FIXTURE = json.loads((SHARED / "formatting.json").read_text("utf-8"))
 CASES = FIXTURE["cases"]
+BOXES = ("prayer", "confession", "dialogue", "assurance", "announcement")
 
 # Text saved before formatting, with characters a prayer may hold: none is a mark.
 OLD = [
@@ -272,13 +312,50 @@ def _as_fixture(line: Line) -> dict:
 
 def test_the_shared_fixture_covers_every_box_and_names_the_assurance_response():
     assert FIXTURE["assurance_response"] == ASSURANCE_RESPONSE
-    assert {c["box"] for c in CASES} == {"prayer", "confession", "dialogue", "assurance", "announcement"}
-    assert len(CASES) == 26 and len({c["name"] for c in CASES}) == 26
+    assert {c["box"] for c in CASES} == set(BOXES)
+    assert len(CASES) == 35 and len({c["name"] for c in CASES}) == 35
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["name"] for c in CASES])
 def test_the_printed_lines_are_the_shared_fixture_s(case):
     assert [_as_fixture(line) for line in _lines(case["box"], case["text"])] == case["lines"]
+
+
+# The seeded random texts of shared/formatting_fuzz.json (plan review fixes, 2026-10-25): marks, spaces of every
+# kind, labels and word characters thrown together, so the preview's copy of the rules meets what no one wrote a
+# case for. The frontend's formatting.test.ts checks every case too.
+_FUZZ_SEED, _FUZZ_CASES = 20261025, 300
+_FUZZ_ATOMS = ("*", "**", "\\", "#", "# ", "## ", "- ", "-", "1. ", "123. ", "1234. ", ".", " ", "\t", "\u00a0", "\n",
+               "\n", "a", "Z", "9", "_", "\u00e9", "People:", "Leader:", "people: ", "LEADER:", "word", "<b>", "&",
+               "\u2003", "\u2028", "\u0085")
+
+
+def fuzz_fixture() -> dict:
+    """shared/formatting_fuzz.json as the printed bulletin prints it now."""
+    rng = random.Random(_FUZZ_SEED)
+    cases = []
+    for _ in range(_FUZZ_CASES):
+        box = rng.choice(BOXES)
+        text = "".join(rng.choice(_FUZZ_ATOMS) for _ in range(rng.randint(1, 16)))
+        cases.append({"box": box, "text": text, "lines": [_as_fixture(line) for line in _lines(box, text)]})
+    return {"_about": "Seeded random texts (tests/test_formatting.py fuzz_fixture, seed 20261025) as the printed "
+                      "bulletin prints them, in shared/formatting.json's form. Regenerate with "
+                      "write_fuzz_fixture(); frontend/src/lib/formatting.test.ts checks every case.",
+            "assurance_response": ASSURANCE_RESPONSE, "cases": cases}
+
+
+def write_fuzz_fixture() -> None:
+    """Rewrite shared/formatting_fuzz.json (one case a line, ASCII with escapes):
+    `cd backend && ../.venv/bin/python -c "import tests.test_formatting as t; t.write_fuzz_fixture()"`."""
+    data = fuzz_fixture()
+    head = {k: v for k, v in data.items() if k != "cases"}
+    rows = ",\n".join("  " + json.dumps(case) for case in data["cases"])
+    (SHARED / "formatting_fuzz.json").write_text(json.dumps(head)[:-1] + ', "cases": [\n' + rows + "\n]}\n", "utf-8")
+
+
+def test_the_seeded_random_texts_print_as_the_shared_fuzz_fixture_says():
+    stored = json.loads((SHARED / "formatting_fuzz.json").read_text("utf-8"))
+    assert stored == fuzz_fixture(), "the printed lines changed: rerun write_fuzz_fixture() and check the diff"
 
 
 def test_the_marks():
@@ -304,7 +381,7 @@ def test_a_long_text_full_of_unclosed_marks_reads_quickly():
         assert time.monotonic() - started < 1.0
 
 
-# --- old text prints exactly as before ---
+# --- old text without a mark prints exactly as before ---
 
 def _legacy_formatted(text, style="body", *, bold=False):
     return [Line(style, (Span(text, bold=bold),))]
@@ -386,6 +463,39 @@ def test_old_own_affirmation_text_prints_in_the_word_copy_as_one_paragraph():
     assert texts[texts.index("Affirmation of Faith") + 1] == OLD[7]
 
 
+# --- changes to old text (the owner's answer 3 of 2026-10-25: accepted) ---
+# Saved text with a mark of the grammar now prints formatted, and the Review step's preview shows it first. The
+# owner's count (31 saved services): none with list-like lines in a prayer or a custom element, none in a
+# bulletin, one with an asterisk before a letter.
+
+CHANGED = [
+    ("prayer", "- the sick\n- the lonely",
+     [Line("item", (Span("the sick"),), marker="•"), Line("item", (Span("the lonely"),), marker="•")]),
+    ("prayer", "1. We confess.\n2. We are forgiven.",
+     [Line("item", (Span("We confess."),), marker="1."), Line("item", (Span("We are forgiven."),), marker="2.")]),
+    ("prayer", "We pray for *all* people.", [Line("body", (Span("We pray for "), Span("all", italic=True), Span(" people.")))]),
+    ("prayer", "Thanks be to God for **all** things.",
+     [Line("body", (Span("Thanks be to God for "), Span("all", bold=True), Span(" things.")))]),
+    ("announcement", "- Tuesday: Bible study\n- Wednesday: Choir",
+     [Line("center", (Span("• Tuesday: Bible study"),)), Line("center", (Span("• Wednesday: Choir"),))]),
+    ("prayer", "\\- not a list, \\*not italic\\*", [Line("body", (Span("- not a list, *not italic*"),))]),
+]
+
+
+@pytest.mark.parametrize(("box", "text", "lines"), CHANGED, ids=[text for _box, text, _lines in CHANGED])
+def test_old_text_with_a_mark_now_prints_formatted(box, text, lines):
+    assert formatting.has_marks(text)
+    assert _lines(box, text) == lines
+
+
+def test_an_old_dashed_list_now_prints_as_a_list_in_the_word_copy():
+    liturgy = dict(new_kwargs()["liturgy"], prayers_of_the_people="For all who mourn:\n- the sick\n- the lonely")
+    doc = Document(BytesIO(worship_service.build_docx(**{**new_kwargs(include_prayers_of_the_people=True),
+                                                           "liturgy": liturgy})))
+    texts = [p.text for p in doc.paragraphs]
+    assert texts[texts.index("For all who mourn:"):][:3] == ["For all who mourn:", "•\tthe sick", "•\tthe lonely"]
+
+
 # --- the Word copy ---
 
 FORMATTED = "# For the world\nWe pray for **peace** and *justice*.\n## Near\n- the sick\n12. the lonely"
@@ -445,7 +555,9 @@ def test_the_printed_bulletin_reads_the_marks_in_pdf_and_word(church):
     assert "**" not in pdf and "# " not in pdf
     word = Document(BytesIO(documents.build_printed(church, _input(opening_prayer=FORMATTED), "docx", None,
                                                     charge=lambda n: None).content))
-    assert [(r.bold, r.font.size) for r in _paragraph(word, "For the world").runs] == [(True, Pt(13))]
+    # The printed bulletin's box headings: 12 pt and 11 pt (the owner's answer 1 of 2026-10-25).
+    assert [(r.bold, r.font.size) for r in _paragraph(word, "For the world").runs] == [(True, Pt(12))]
+    assert [(r.bold, r.font.size) for r in _paragraph(word, "Near").runs] == [(True, Pt(11))]
     item = _paragraph(word, "•\tthe sick")
     assert (item.paragraph_format.left_indent, item.paragraph_format.first_line_indent) == (Inches(0.25),
                                                                                            Inches(-0.25))
@@ -457,7 +569,29 @@ def test_the_announcements_keep_a_heading_and_a_list_centered():
     word = Document(BytesIO(printed_docx.render_docx(service(bulletin=week))))
     heading, item = _paragraph(word, "This week"), _paragraph(word, "• Choir at seven")
     assert heading.alignment == item.alignment == printed_docx.WD_ALIGN_PARAGRAPH.CENTER
-    assert [(r.bold, r.font.size) for r in heading.runs] == [(True, Pt(13))]
+    assert [(r.bold, r.font.size) for r in heading.runs] == [(True, Pt(12))]
+
+
+def test_the_printed_bulletin_s_box_headings_sit_under_its_element_headings():
+    """The owner's answer 1 of 2026-10-25: bold 12 pt and 11 pt in the case typed, under the element's 11 pt bold
+    capitals; the Word copy keeps 13 pt and 12 pt (test_the_word_copy_reads_the_marks)."""
+    styles = printed_pdf.STYLES
+    assert [styles[k].fontSize for k in ("element", "heading1", "heading2", "center_heading1", "center_heading2")] == [
+        11, 12, 11, 12, 11]
+    assert [printed_docx._SIZE[k] for k in ("heading1", "heading2", "center_heading1", "center_heading2")] == [
+        12, 11, 12, 11]
+    lines = pb.formatted("# For the world\n## Near")
+    assert [(line.style, line.spans) for line in lines] == [("heading1", (Span("For the world", bold=True),)),
+                                                             ("heading2", (Span("Near", bold=True),))]
+
+
+@pytest.mark.parametrize("style", ["heading1", "heading2", "center_heading1", "center_heading2"])
+def test_a_box_s_heading_at_the_foot_of_a_pdf_page_moves_on_with_what_follows(style):
+    """As an element's heading does: a page break unless the heading and two lines fit (printed_pdf.KEEP)."""
+    keep, _paragraph_ = printed_pdf._flowables(Line(style, (Span("Heading", bold=True),)), 300.0)
+    assert isinstance(keep, CondPageBreak)
+    own = printed_pdf.STYLES[style]
+    assert keep.height >= own.spaceBefore + own.leading + 2 * printed_pdf.STYLES["body"].leading
 
 
 def test_the_email_s_attachments_read_the_marks(church):
@@ -510,6 +644,18 @@ def test_the_reviewer_and_the_pews_read_the_words_without_the_marks(tmp_db, make
         assert "Gathering\nGracious God, as we journey, hear us.\n- all who mourn" in sent
         assert "Leader: Come.\n# People: not a heading" in sent
         assert "**" not in sent
+
+
+def test_revise_gets_the_text_as_typed_marks_and_all(tmp_db, make_user, make_church):
+    """S "AI interplay": Revise keeps the marks, so the AI is sent the draft with them."""
+    cid = make_church(name="Grace", owner_user_id=make_user(email="pastor@example.com"))
+    fake = openai_client.FakeAI(reply="Revised.")
+    openai_client.set_ai_for_tests(fake)
+    text = "# Gathering\nGracious God, hear **us** and *all* who mourn.\n- the sick\n2. the lonely"
+    r = make_api_client().post("/liturgy/revise", json={"section": "opening_prayer", "text": text, "notes": ["Shorter."]},
+                               headers=church_headers("pastor@example.com", cid))
+    assert r.status_code == 200, r.text
+    assert text in fake.calls[0]["messages"][-1]["content"]
 ````
 
 **In `backend/tests/test_no_streamlit_in_core.py`, replace:**
@@ -987,13 +1133,17 @@ def _leader_people(text: str) -> list[Line]:
 **In `backend/printed_pdf.py`, replace:**
 
 ````
+# whole reading to the next page).
 KEEP = {"section": 60.0, "element": 47.0}
 ````
 
 **with:**
 
 ````
-KEEP = {"section": 60.0, "element": 47.0, "heading1": 44.0, "heading2": 42.0}
+# whole reading to the next page). A box's own heading (formatting spec),
+# centered or not: itself and two lines.
+KEEP = {"section": 60.0, "element": 47.0, "heading1": 47.0, "heading2": 45.0,
+        "center_heading1": 47.0, "center_heading2": 45.0}
 ````
 
 **In `backend/printed_pdf.py`, replace:**
@@ -1007,13 +1157,18 @@ KEEP = {"section": 60.0, "element": 47.0, "heading1": 44.0, "heading2": 42.0}
 
 ````
     "page": _style("page", alignment=TA_CENTER),
-    # Formatting (formatting spec): a box's own headings, under the element's
-    # heading and never above it in weight, and its list items.
-    "heading1": _style("heading1", fontSize=13, leading=16, spaceBefore=6),
-    "heading2": _style("heading2", fontSize=12, leading=15, spaceBefore=6),
+    # Formatting (formatting spec; the owner's answer 1 of 2026-10-25): a box's
+    # own headings, bold (printed_bulletin makes every span bold) at 12 pt and
+    # 11 pt in the case typed, and its list items. They sit under the
+    # element's heading, which is 11 pt bold in capitals with the leader's
+    # name at the right: "heading2" is the element heading's size and differs
+    # by its case, "heading1" a point larger, so the capitals keep the
+    # element's heading the higher level.
+    "heading1": _style("heading1", fontSize=12, leading=15, spaceBefore=6),
+    "heading2": _style("heading2", fontSize=11, leading=13, spaceBefore=6),
     "item": _style("item", leftIndent=18, bulletIndent=0, bulletFontName="Times-Roman", bulletFontSize=11),
-    "center_heading1": _style("center_heading1", fontSize=13, leading=16, spaceBefore=6, alignment=TA_CENTER),
-    "center_heading2": _style("center_heading2", fontSize=12, leading=15, spaceBefore=6, alignment=TA_CENTER),
+    "center_heading1": _style("center_heading1", fontSize=12, leading=15, spaceBefore=6, alignment=TA_CENTER),
+    "center_heading2": _style("center_heading2", fontSize=11, leading=13, spaceBefore=6, alignment=TA_CENTER),
 }
 ````
 
@@ -1034,6 +1189,21 @@ KEEP = {"section": 60.0, "element": 47.0, "heading1": 44.0, "heading2": 42.0}
 **In `backend/printed_docx.py`, replace:**
 
 ````
+import printed_pdf
+
+````
+
+**with:**
+
+````
+import printed_pdf
+from worship_service import append_paragraph
+
+````
+
+**In `backend/printed_docx.py`, replace:**
+
+````
           "contact": WD_ALIGN_PARAGRAPH.CENTER, "center": WD_ALIGN_PARAGRAPH.CENTER}
 _SPACE_BEFORE = {"element": 8, "section": 12, "note": 10, "credit": 4, "center": 3}
 _SIZE = {"title": 28, "credit": 9, "contact": 12}
@@ -1046,10 +1216,24 @@ _SIZE = {"title": 28, "credit": 9, "contact": 12}
           "center_heading1": WD_ALIGN_PARAGRAPH.CENTER, "center_heading2": WD_ALIGN_PARAGRAPH.CENTER}
 _SPACE_BEFORE = {"element": 8, "section": 12, "note": 10, "credit": 4, "center": 3,
                  "heading1": 6, "heading2": 6, "center_heading1": 6, "center_heading2": 6}
+# A box's own headings (formatting spec; the owner's answer 1 of 2026-10-25): bold 12 pt and 11 pt in the
+# case typed, under the element's 11 pt bold capitals (printed_pdf.STYLES says why that order holds).
 _SIZE = {"title": 28, "credit": 9, "contact": 12,
-         "heading1": 13, "heading2": 12, "center_heading1": 13, "center_heading2": 12}
+         "heading1": 12, "heading2": 11, "center_heading1": 12, "center_heading2": 11}
 # Formatting (formatting spec): a heading stays with what follows it; an item hangs after its marker.
 _KEEP_WITH_NEXT = {"element", "heading1", "heading2", "center_heading1", "center_heading2"}
+````
+
+**In `backend/printed_docx.py`, replace:**
+
+````
+    p = doc.add_paragraph()
+````
+
+**with:**
+
+````
+    p = append_paragraph(doc)       # a box's blocks can be thousands of lines (formatting spec)
 ````
 
 **In `backend/printed_docx.py`, replace:**
@@ -1099,8 +1283,29 @@ except ImportError:
 ````
     from docx.shared import Inches, Pt
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.text.paragraph import Paragraph
 except ImportError:
     Document = None
+
+
+def append_paragraph(doc):
+    """doc.add_paragraph() in constant time (formatting plan, review fixes):
+    python-docx finds the body's closing w:sectPr by reading every paragraph
+    before it, so a file of tens of thousands of list items took most of a
+    minute. The same empty paragraph, put right before that w:sectPr."""
+    body = doc.element.body
+    p = OxmlElement("w:p")
+    try:
+        last = body[-1]
+    except IndexError:
+        last = None
+    if last is not None and last.tag == qn("w:sectPr"):
+        last.addprevious(p)
+    else:
+        body.append(p)
+    return Paragraph(p, doc)
 
 
 # A box's own headings (formatting spec): bold Times, these sizes, never Word's
@@ -1132,7 +1337,7 @@ def _add_text(doc, text: str, *, bold: bool = False) -> None:
             doc.add_paragraph(text)
         return
     for block in formatting.parse(text):
-        p = doc.add_paragraph()
+        p = append_paragraph(doc)
         heading = block.kind in HEADING_POINTS
         if heading:
             p.paragraph_format.space_before = Pt(6)
@@ -1419,7 +1624,6 @@ def _note(note) -> NoteOut:
 
 ````
 - `shared/scripture_refs.json` is hand-written, not recorded, so it has no `.meta.json` sidecar. It is the authority for `backend/scripture_refs.py` and for 2b's `frontend/src/lib/scripture-refs.ts`: change a case here first, then both ports. `backend/tests/test_scripture_refs.py` runs it in pytest; 2b's `lib/scripture-refs.test.ts` reads it with `fs` from `../backend/tests/fixtures/shared/`. The top-level `"_about"` key documents each section's encoding. Slice 5a adds its `doc_readings` cases to the `resolve_readings` section.
-
 ````
 
 **with:**
@@ -1427,20 +1631,27 @@ def _note(note) -> NoteOut:
 ````
 - `shared/scripture_refs.json` is hand-written, not recorded, so it has no `.meta.json` sidecar. It is the authority for `backend/scripture_refs.py` and for 2b's `frontend/src/lib/scripture-refs.ts`: change a case here first, then both ports. `backend/tests/test_scripture_refs.py` runs it in pytest; 2b's `lib/scripture-refs.test.ts` reads it with `fs` from `../backend/tests/fixtures/shared/`. The top-level `"_about"` key documents each section's encoding. Slice 5a adds its `doc_readings` cases to the `resolve_readings` section.
 - `shared/formatting.json` is hand-written too (formatting spec, 2026-10-25): each case is a box's text and the lines the printed bulletin prints for it. It is the authority for `backend/formatting.py` with `backend/printed_bulletin.py` and for `frontend/src/lib/formatting.ts` (the Review step's preview): change a case here first, then both. `backend/tests/test_formatting.py` and `frontend/src/lib/formatting.test.ts` run every case.
-
+- `shared/formatting_fuzz.json` is generated, not hand-written: 300 seeded random texts (marks, spaces of every kind, labels and word characters) and the lines the printed bulletin prints for each, in `formatting.json`'s form. `backend/tests/test_formatting.py` regenerates it from the seed and fails if the file differs (rewrite it with `cd backend && ../.venv/bin/python -c "import tests.test_formatting as t; t.write_fuzz_fixture()"` after a deliberate change, and read the diff); `frontend/src/lib/formatting.test.ts` checks every case, so the preview cannot drift from print on text no one wrote a case for.
 ````
 <!-- /directives -->
 
-- [ ] **Step 4: Run them and the suite**
+- [ ] **Step 4: Generate the seeded fuzz fixture**
+
+The printed bulletin's lines for 300 seeded random texts (`test_formatting.fuzz_fixture`, seed 20261025), which the frontend's preview must match too; the test regenerates them and compares, so the file can only be the code's own output.
+
+Run: `(cd backend && ../.venv/bin/python -c "import tests.test_formatting as t; t.write_fuzz_fixture()") && grep -c '^  {"box": ' backend/tests/fixtures/shared/formatting_fuzz.json && sha256sum backend/tests/fixtures/shared/formatting_fuzz.json | cut -c1-16 && LC_ALL=C grep -c -P '[^\x00-\x7f]' backend/tests/fixtures/shared/formatting_fuzz.json`
+**Expected:** `300`; `5aeb12cebfeb0a83`; `0` (ASCII only: every space and letter beyond it is an escape).
+
+- [ ] **Step 5: Run them and the suite**
 
 Run: `.venv/bin/python -m pytest -q backend/tests/test_formatting.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_usecase_liturgy_revise.py 2>&1 | tail -1`, then `.venv/bin/python -m pytest -q backend/tests 2>&1 | tail -1`
-**Expected:** `84 passed in <t>s`, then `2367 passed, 50 skipped in <t>s`.
+**Expected:** `107 passed in <t>s`, then `2390 passed, 50 skipped in <t>s`.
 
-- [ ] **Step 5: Commit and push**
+- [ ] **Step 6: Commit and push**
 
 ```bash
-git add backend/formatting.py backend/tests/test_formatting.py backend/tests/fixtures/shared/formatting.json backend/printed_bulletin.py backend/printed_pdf.py backend/printed_docx.py backend/worship_service.py backend/usecases/liturgy_review.py backend/api/routes/liturgy_review.py backend/tests/fixtures/README.md backend/tests/test_no_streamlit_in_core.py backend/tests/test_usecase_liturgy_revise.py
-git commit -q -m "Formatting: the grammar and what prints" -m "backend/formatting.py reads bold, italic, two headings and lists (formatting spec); the Word copy, the printed bulletin (PDF and Word) and so the email's attachments print them, and text without a mark prints exactly as before. The reviewer and the pews read the words without the marks; Revise keeps them. shared/formatting.json is the printed bulletin's output for 26 cases." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+git add backend/formatting.py backend/tests/test_formatting.py backend/tests/fixtures/shared/formatting.json backend/tests/fixtures/shared/formatting_fuzz.json backend/printed_bulletin.py backend/printed_pdf.py backend/printed_docx.py backend/worship_service.py backend/usecases/liturgy_review.py backend/api/routes/liturgy_review.py backend/tests/fixtures/README.md backend/tests/test_no_streamlit_in_core.py backend/tests/test_usecase_liturgy_revise.py
+git commit -q -m "Formatting: the grammar and what prints" -m "backend/formatting.py reads bold, italic, two headings and lists (formatting spec); the Word copy, the printed bulletin (PDF and Word) and so the email's attachments print them, and text without a mark prints exactly as before. The reviewer and the pews read the words without the marks; Revise keeps them. shared/formatting.json is the printed bulletin's output for 35 cases, shared/formatting_fuzz.json for 300 seeded random texts." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git push origin claude/slice-2-plan-4q33le
 ```
@@ -1457,8 +1668,9 @@ git push origin claude/slice-2-plan-4q33le
 ````
 /**
  * The preview's copy of the print rules (formatting spec, Testing): every case of
- * backend/tests/fixtures/shared/formatting.json, which backend/tests/test_formatting.py
- * checks against the printed bulletin itself, so the preview shows what prints.
+ * backend/tests/fixtures/shared/formatting.json and of the seeded random
+ * shared/formatting_fuzz.json, which backend/tests/test_formatting.py checks
+ * against the printed bulletin itself, so the preview shows what prints.
  */
 import { readFileSync } from "node:fs";
 
@@ -1467,9 +1679,13 @@ import { describe, expect, it } from "vitest";
 import { hasMarks, parse, printedLines, type BoxKind, type PrintedLine } from "./formatting";
 
 type Case = { name: string; box: BoxKind; text: string; lines: { style: string; marker: string; spans: [string, string][] }[] };
-const fixture = JSON.parse(
-  readFileSync(new URL("../../../backend/tests/fixtures/shared/formatting.json", import.meta.url), "utf-8"),
-) as { assurance_response: string; cases: Case[] };
+const read = (name: string) =>
+  JSON.parse(readFileSync(new URL(`../../../backend/tests/fixtures/shared/${name}`, import.meta.url), "utf-8")) as {
+    assurance_response: string;
+    cases: Case[];
+  };
+const fixture = read("formatting.json");
+const fuzz = read("formatting_fuzz.json");
 
 const asFixture = (line: PrintedLine) => ({
   style: line.style,
@@ -1479,9 +1695,16 @@ const asFixture = (line: PrintedLine) => ({
 
 describe("formatting (shared/formatting.json)", () => {
   it("prints every case as the printed bulletin does", () => {
-    expect(fixture.cases).toHaveLength(26);
+    expect(fixture.cases).toHaveLength(35);
     for (const c of fixture.cases) {
       expect(printedLines(c.box, c.text, fixture.assurance_response).map(asFixture), c.name).toEqual(c.lines);
+    }
+  });
+
+  it("prints every seeded random text as the printed bulletin does (formatting_fuzz.json)", () => {
+    expect(fuzz.cases).toHaveLength(300);
+    for (const c of fuzz.cases) {
+      expect(printedLines(c.box, c.text, fuzz.assurance_response).map(asFixture), JSON.stringify(c.text)).toEqual(c.lines);
     }
   });
 
@@ -1502,9 +1725,11 @@ describe("formatting (shared/formatting.json)", () => {
     ]);
   });
 
-  it("reads a long text of unclosed marks quickly", () => {
+  it("reads a long text of unclosed marks in linear time", () => {
+    // Five times a box's 20,000-character limit: the linear scan takes a tenth of a second here; a scan that looks
+    // for each mark's close from scratch takes about 0.3 s at the limit, so only a larger text tells them apart.
     const started = Date.now();
-    for (const text of ["*a ".repeat(6666), "**a ".repeat(5000), "*".repeat(20_000)]) parse(text);
+    for (const text of ["*a ".repeat(33_330), "**a ".repeat(25_000), "*".repeat(100_000), "**x* ".repeat(20_000)]) parse(text);
     expect(Date.now() - started).toBeLessThan(1000);
   });
 });
@@ -1622,6 +1847,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BuilderLayout from "@/app/(signed-in)/(church)/builder/layout";
 import { draftKey, type DraftV1 } from "@/lib/draft/schema";
+import { printedLines } from "@/lib/formatting";
 import { installFakeApi } from "@/test/fake-api";
 import {
   bulletinSettings,
@@ -1638,7 +1864,7 @@ import {
 } from "@/test/fixtures";
 import { renderWithProviders } from "@/test/render";
 
-import { PREVIEW_EMPTY, PREVIEW_INTRO, PREVIEW_TITLE, TextPreviewCard } from "./text-preview-card";
+import { PREVIEW_EMPTY, PREVIEW_INTRO, PREVIEW_TITLE, previewBoxes, TextPreviewCard } from "./text-preview-card";
 
 const KEY = draftKey(USER_ID, church().id);
 
@@ -1727,6 +1953,61 @@ describe("the text preview (formatting spec)", () => {
     for (const card of Object.values(draft.liturgy.cards)) Object.assign(card, { text: "", origin: "typed" });
     const card = await open(draft);
     expect(within(card).getByText(PREVIEW_EMPTY)).toBeInTheDocument();
+  });
+});
+
+describe("previewBoxes (formatting spec)", () => {
+  const lines = (draft: DraftV1, id: string) => {
+    const box = previewBoxes(draft).find((b) => b.id === id);
+    return box ? printedLines(box.box, box.text) : undefined;
+  };
+
+  it("prints the Prayer of Confession and the Affirmation's own text all bold, as the printed bulletin does", () => {
+    const draft = testDraft();
+    const cards = draft.liturgy.cards;
+    cards.prayer_of_confession = { ...cards.prayer_of_confession, enabled: true, text: "We confess *our sin*.", origin: "typed" };
+    draft.liturgy.affirmation = { include: true, choice: "own", text: "We trust in *God*.\n- who made us", origin: "user" };
+    expect(lines(draft, "prayer_of_confession")).toEqual([
+      {
+        style: "bold",
+        marker: "",
+        spans: [
+          { text: "We confess ", bold: true, italic: false },
+          { text: "our sin", bold: true, italic: true },
+          { text: ".", bold: true, italic: false },
+        ],
+      },
+    ]);
+    expect(lines(draft, "affirmation")).toEqual([
+      {
+        style: "bold",
+        marker: "",
+        spans: [
+          { text: "We trust in ", bold: true, italic: false },
+          { text: "God", bold: true, italic: true },
+          { text: ".", bold: true, italic: false },
+        ],
+      },
+      { style: "item", marker: "•", spans: [{ text: "who made us", bold: true, italic: false }] },
+    ]);
+  });
+
+  it("leaves out a switched-off card, and the Affirmation when it is off or a creed", () => {
+    const draft = testDraft();
+    const cards = draft.liturgy.cards;
+    cards.opening_prayer = { ...cards.opening_prayer, enabled: false, text: "Gracious God", origin: "typed" };
+    draft.liturgy.affirmation = { include: false, choice: "own", text: "We trust.", origin: "user" };
+    expect(lines(draft, "opening_prayer")).toBeUndefined();
+    expect(lines(draft, "affirmation")).toBeUndefined();
+    draft.liturgy.affirmation = { include: true, choice: "nicene", text: "We trust.", origin: "user" };
+    expect(lines(draft, "affirmation")).toBeUndefined();
+  });
+
+  it("reads line endings, a vertical tab and a form feed as the server does", () => {
+    const draft = testDraft();
+    const cards = draft.liturgy.cards;
+    cards.opening_prayer = { ...cards.opening_prayer, enabled: true, text: "\r\n# One\r- two\u000b- three\u000c\u0001four ", origin: "typed" };
+    expect(previewBoxes(draft).find((b) => b.id === "opening_prayer")?.text).toBe("# One\n- two\n- three\nfour");
   });
 });
 ````
@@ -2142,8 +2423,21 @@ export function printedLines(box: BoxKind, text: string, response = ""): Printed
 /** The two dialogue boxes (`formatting.INLINE_ONLY`): bold and italic only, so Leader and People lines read as today. */
 export const INLINE_ONLY: ReadonlySet<string> = new Set(["call_to_worship", "assurance"]);
 
-/** Trims as the server's `str.strip()` does before printing (`usecases.archive`). */
-export const serverStrip = pyStrip;
+/**
+ * A box's text as the server prints it (`usecases.archive`: `_xml_safe`, then `str.strip()`): a Windows or
+ * old-Mac line ending, a vertical tab or a form feed becomes a line break, what a Word file cannot hold
+ * (`_XML_BAD`: other control characters, U+FFFE, U+FFFF, a lone surrogate) goes, and the ends are trimmed.
+ */
+export function serverStrip(raw: string): string {
+  let out = "";
+  for (const ch of raw.replace(/\r\n?/g, "\n")) {
+    // By code point, as Python reads a string: a surrogate pair is one character, a lone surrogate its own.
+    const c = ch.codePointAt(0) ?? 0;
+    if (c === 0x0b || c === 0x0c) out += "\n";
+    else if (!(c <= 0x08 || (c >= 0x0e && c <= 0x1f) || c === 0xfffe || c === 0xffff || (c >= 0xd800 && c <= 0xdfff))) out += ch;
+  }
+  return pyStrip(out);
+}
 ````
 
 **Create `frontend/src/components/builder/formatting-help.tsx`:**
@@ -2204,8 +2498,9 @@ const SECTION_BOX: Partial<Record<string, BoxKind>> = {
   prayer_of_confession: "confession",
 };
 
-/** Every box that prints text, as the server receives it (trimmed): the prayers in service order, the
- * Affirmation's own text, the custom elements, then the announcements. */
+/** Every box that prints text, as the server prints it (`serverStrip`: line endings, a vertical tab and a form
+ * feed as line breaks, trimmed): the switched-on prayers in service order, the Affirmation's own text (all bold, as
+ * printed), the custom elements, then the announcements. */
 export function previewBoxes(draft: DraftV1): PreviewBox[] {
   const boxes: PreviewBox[] = [];
   const add = (id: string, label: string, box: BoxKind, raw: string) => {
@@ -2233,7 +2528,8 @@ const LINE_CLASS: Record<PrintedLine["style"], string> = {
   center: "text-center",
   heading1: "pt-1 text-lg",
   heading2: "pt-1 text-base",
-  item: "grid grid-cols-[2rem_1fr]",
+  // The marker's column is at least 2rem and as wide as a long one ("100.") needs.
+  item: "grid grid-cols-[minmax(2rem,max-content)_1fr] gap-x-1",
   center_heading1: "pt-1 text-center text-lg",
   center_heading2: "pt-1 text-center text-base",
 };
@@ -2538,13 +2834,13 @@ import { TextPreviewCard } from "./text-preview-card";
 - [ ] **Step 4: Run them, the suite, typecheck and lint**
 
 Run: the Step 2 command; the frontend suite; typecheck and lint.
-**Expected:** `Test Files  7 passed (7)` and `Tests  121 passed (121)`; `1158 passed (1158)` in `125 passed (125)` files; `typecheck 0`, `lint 0`.
+**Expected:** `Test Files  7 passed (7)` and `Tests  125 passed (125)`; `1162 passed (1162)` in `125 passed (125)` files; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit and push**
 
 ```bash
 git add frontend/src/lib/formatting.ts frontend/src/lib/formatting.test.ts frontend/src/components/builder/formatting-help.tsx frontend/src/components/builder/formatting-help.test.tsx frontend/src/components/builder/review/text-preview-card.tsx frontend/src/components/builder/review/text-preview-card.test.tsx frontend/src/components/builder/liturgy/section-card.tsx frontend/src/components/builder/liturgy/custom-element-card.tsx frontend/src/components/builder/liturgy/affirmation-card.tsx frontend/src/components/builder/bulletin/bulletin-step.tsx frontend/src/components/builder/review/review-send-step.tsx frontend/src/components/builder/liturgy/affirmation-card.test.tsx frontend/src/components/builder/liturgy/liturgy-step.test.tsx frontend/src/components/builder/liturgy/review-step.test.tsx frontend/src/components/builder/review/review-send-step.test.tsx
-git commit -q -m "Formatting: the help line and the Review preview" -m "A Formatting line under each box that reads the marks (bold and italic only in the Call to Worship and the Assurance), and a Text preview on the Review step drawing each box as the printed bulletin prints it (lib/formatting.ts passes shared/formatting.json too). React text only, never HTML." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+git commit -q -m "Formatting: the help line and the Review preview" -m "A Formatting line under each box that reads the marks (bold and italic only in the Call to Worship and the Assurance), and a Text preview on the Review step drawing each box as the printed bulletin prints it (lib/formatting.ts passes shared/formatting.json and formatting_fuzz.json too). React text only, never HTML." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LhHxTA5m6dKphy5MuKjHCS"
 git push origin claude/slice-2-plan-4q33le
 ```
@@ -2559,27 +2855,32 @@ In the Change column, `⏎` is a line break in the quoted text.
 
 | # | Rule | Change | Run | Expected (planted) |
 |---|---|---|---|---|
-| B1 | old text prints exactly as before (printed bulletin) | `backend/printed_bulletin.py`: `        return [Line(style, (Span(text, bold=bold),))]⏎    center = style == "center"` → `        return [Line(style, (Span(text.strip(), bold=bold),))]⏎    center = style == "center"` | `backend/tests/test_formatting.py` | `3 failed, 73 passed` |
-| B2 | old text prints exactly as before (Word copy) | `backend/worship_service.py`: `    if not formatting.has_marks(text):⏎        if bold:` → `    if False:⏎        if bold:` | same | `1 failed, 75 passed` |
-| B3 | People lines still bold | `backend/printed_bulletin.py`: `(Span("People: ", bold=True), *_spans(content, bold=True))` → `(Span("People: ", bold=True), *_spans(content))` | same | `17 failed, 59 passed` |
-| B4 | `**x**` is bold | `backend/formatting.py`: `walk(i + 1, j, bold or kind == "**", italic or kind == "*")` → `walk(i + 1, j, bold, italic or kind == "*")` | same | `10 failed, 66 passed` |
-| B5 | `*x*` is italic | same line → `walk(i + 1, j, bold or kind == "**", italic)` | same | `9 failed, 67 passed` |
-| B6 | only `#` and `##` are headings | `backend/formatting.py`: `_HEADING = re.compile(r"(#{1,2}) (.*)")` → `_HEADING = re.compile(r"(#{1,3}) (.*)")` | same | `5 failed, 71 passed` |
-| B7 | a list line needs "- " | `backend/formatting.py`: `_BULLET = re.compile(r"- (.*)")` → `_BULLET = re.compile(r"- ?(.*)")` | same | `5 failed, 71 passed` |
-| B8 | a literal `*` in normal text is unaffected ("5 * 3 * 2") | `backend/formatting.py`: `_SPACE = " \t\u00a0"` → `_SPACE = "\t"` | same | `4 failed, 72 passed` |
-| B9 | no HTML or XML injection in the PDF | `backend/printed_pdf.py`: `        text = escape(to_pdf_text(span.text)).replace("\n", "<br/>")` → `        text = to_pdf_text(span.text).replace("\n", "<br/>")` | same | `1 failed, 75 passed` |
-| B10 | the reviewer and the pews read the words without the marks | `backend/api/routes/liturgy_review.py`: `                                      formatting.plain(c.text, inline_only=c.section in formatting.INLINE_ONLY))` → `                                      c.text)` | same | `1 failed, 75 passed` |
-| B11 | the limit's 20,000 characters read quickly (linear scan) | `backend/formatting.py`: `                j = nxt[kind][i + 2] if i + 2 <= n else n          # at least one token inside` → `                j = next((k for k in range(i + 2, n) if toks[k][0] == kind and closes[k]), n)` | same | `1 failed, 75 passed` |
-| F1 | the preview follows the print rules (the shared fixture) | `frontend/src/lib/formatting.ts`: `const ALNUM = /^[A-Za-z0-9]$/;` → `const ALNUM = /^[A-Za-z]$/;` | `src/lib/formatting.test.ts` | `2 failed \| 2 passed (4)` |
-| F2 | People lines bold in the preview | `frontend/src/lib/formatting.ts`: `[span("People: ", true), ...dialogueSpans(content, true)]` → `[span("People: ", true), ...dialogueSpans(content)]` | `src/lib/formatting.test.ts src/components/builder/review/text-preview-card.test.tsx` | `2 failed \| 5 passed (7)` |
-| F3 | no HTML injection in the preview | `frontend/src/components/builder/review/text-preview-card.tsx`: `          <span key={i} className={cn(s.bold && "font-bold", s.italic && "italic")}>⏎            {s.text}⏎          </span>` → `          <span key={i} className={cn(s.bold && "font-bold", s.italic && "italic")} dangerouslySetInnerHTML={{ __html: s.text }} />` | `src/components/builder/review/text-preview-card.test.tsx` | `1 failed \| 2 passed (3)` |
+| B1 | old text prints exactly as before (printed bulletin) | `backend/printed_bulletin.py`: `        return [Line(style, (Span(text, bold=bold),))]⏎    center = style == "center"` → `        return [Line(style, (Span(text.strip(), bold=bold),))]⏎    center = style == "center"` | `backend/tests/test_formatting.py` | `5 failed, 94 passed` |
+| B2 | old text prints exactly as before (Word copy) | `backend/worship_service.py`: `    if not formatting.has_marks(text):⏎        if bold:` → `    if False:⏎        if bold:` | same | `1 failed, 98 passed` |
+| B3 | People lines still bold | `backend/printed_bulletin.py`: `(Span("People: ", bold=True), *_spans(content, bold=True))` → `(Span("People: ", bold=True), *_spans(content))` | same | `19 failed, 80 passed` |
+| B4 | `**x**` is bold | `backend/formatting.py`: `walk(i + 1, j, bold or kind == "**", italic or kind == "*")` → `walk(i + 1, j, bold, italic or kind == "*")` | same | `14 failed, 85 passed` |
+| B5 | `*x*` is italic | `backend/formatting.py`: `walk(i + 1, j, bold or kind == "**", italic or kind == "*")` → `walk(i + 1, j, bold or kind == "**", italic)` | same | `11 failed, 88 passed` |
+| B6 | only `#` and `##` are headings | `backend/formatting.py`: `_HEADING = re.compile(r"(#{1,2}) (.*)")` → `_HEADING = re.compile(r"(#{1,3}) (.*)")` | same | `5 failed, 94 passed` |
+| B7 | a list line needs "- " | `backend/formatting.py`: `_BULLET = re.compile(r"- (.*)")` → `_BULLET = re.compile(r"- ?(.*)")` | same | `7 failed, 92 passed` |
+| B8 | a literal `*` in normal text is unaffected ("5 * 3 * 2") | `backend/formatting.py`: `_SPACE = " \t\u00a0"` → `_SPACE = "\t"` | same | `6 failed, 93 passed` |
+| B9 | no HTML or XML injection in the PDF | `backend/printed_pdf.py`: `        text = escape(to_pdf_text(span.text)).replace("\n", "<br/>")` → `        text = to_pdf_text(span.text).replace("\n", "<br/>")` | same | `1 failed, 98 passed` |
+| B10 | the reviewer and the pews read the words without the marks | `backend/api/routes/liturgy_review.py`: `                                      formatting.plain(c.text, inline_only=c.section in formatting.INLINE_ONLY))` → `                                      c.text)` | same | `1 failed, 98 passed` |
+| B11 | the limit's 20,000 characters read quickly (linear scan) | `backend/formatting.py`: `                j = nxt[kind][i + 2] if i + 2 <= n else n          # at least one token inside` → `                j = next((k for k in range(i + 2, n) if toks[k][0] == kind and closes[k]), n)` | same | `1 failed, 98 passed` |
+| B12 | Revise gets the text as typed, marks and all | `backend/api/routes/liturgy_review.py`: `section=payload.section, text=payload.text, notes=payload.notes,` → `section=payload.section, text=formatting.plain(payload.text), notes=payload.notes,` | same | `1 failed, 98 passed` |
+| B13 | a box's heading at the foot of a PDF page moves on with what follows | `backend/printed_pdf.py`: `KEEP = {"section": 60.0, "element": 47.0, "heading1": 47.0, "heading2": 45.0,` → `KEEP = {"section": 60.0, "element": 47.0,` | same | `2 failed, 97 passed` |
+| B14 | the printed bulletin's box headings at 12 pt and 11 pt (the owner's answer 1) | `backend/printed_docx.py`: `"heading1": 12, "heading2": 11, "center_heading1": 12, "center_heading2": 11}` → `"heading1": 13, "heading2": 12, "center_heading1": 13, "center_heading2": 12}` | same | `3 failed, 96 passed` |
+| F1 | the preview follows the print rules (the shared fixture) | `frontend/src/lib/formatting.ts`: `const ALNUM = /^[A-Za-z0-9]$/;` → `const ALNUM = /^[A-Za-z]$/;` | `src/lib/formatting.test.ts` | `3 failed \| 2 passed (5)` |
+| F2 | People lines bold in the preview | `frontend/src/lib/formatting.ts`: `[span("People: ", true), ...dialogueSpans(content, true)]` → `[span("People: ", true), ...dialogueSpans(content)]` | `src/lib/formatting.test.ts src/components/builder/review/text-preview-card.test.tsx` | `3 failed \| 8 passed (11)` |
+| F3 | no HTML injection in the preview | `frontend/src/components/builder/review/text-preview-card.tsx`: `          <span key={i} className={cn(s.bold && "font-bold", s.italic && "italic")}>⏎            {s.text}⏎          </span>` → `          <span key={i} className={cn(s.bold && "font-bold", s.italic && "italic")} dangerouslySetInnerHTML={{ __html: s.text }} />` | `src/components/builder/review/text-preview-card.test.tsx` | `1 failed \| 5 passed (6)` |
 | F4 | the help line under each prayer card | `frontend/src/components/builder/liturgy/section-card.tsx`: delete the line `          <FormattingHelp id={`card-${key}-formatting`} dialogue={INLINE_ONLY.has(key)} />` | `src/components/builder/formatting-help.test.tsx` | `1 failed \| 2 passed (3)` |
-| F5 | 44 px at 375 px (the preview's toggle) | `frontend/src/components/builder/review/text-preview-card.tsx`: `<CollapsibleTrigger className="flex min-h-11 items-center` → `<CollapsibleTrigger className="flex items-center` | `src/components/builder/review/text-preview-card.test.tsx` | `3 failed (3)` |
+| F5 | 44 px at 375 px (the preview's toggle) | `frontend/src/components/builder/review/text-preview-card.tsx`: `<CollapsibleTrigger className="flex min-h-11 items-center gap-2 text-left text-sm font-medium">` → `<CollapsibleTrigger className="flex items-center gap-2 text-left text-sm font-medium">` | `src/components/builder/review/text-preview-card.test.tsx` | `3 failed \| 3 passed (6)` |
 | F6 | no em dash in user-facing copy | `frontend/src/components/builder/formatting-help.tsx`: `for a list. Preview on the Review step.";` → `for a list \u2014 preview on the Review step.";` | `src/components/builder/formatting-help.test.tsx` | `1 failed \| 2 passed (3)` |
 | F7 | no help line under a name box | `frontend/src/components/builder/bulletin/bulletin-step.tsx`: `        const help = long ? `bulletin-${key}-formatting` : null;` → `        const help = `bulletin-${key}-formatting`;` | `src/components/builder/formatting-help.test.tsx` | `1 failed \| 2 passed (3)` |
-| F8 | a blank box is left out of the preview (it prints nothing) | `frontend/src/components/builder/review/text-preview-card.tsx`: `    if (text) boxes.push({ id, label, box, text });` → `    boxes.push({ id, label, box, text });` | `src/components/builder/review/text-preview-card.test.tsx` | `2 failed \| 1 passed (3)` |
+| F8 | a blank box is left out of the preview (it prints nothing) | `frontend/src/components/builder/review/text-preview-card.tsx`: `    if (text) boxes.push({ id, label, box, text });` → `    boxes.push({ id, label, box, text });` | `src/components/builder/review/text-preview-card.test.tsx` | `2 failed \| 4 passed (6)` |
+| F9 | the preview's scan is linear | `frontend/src/lib/formatting.ts`: `        const j = i + 2 <= n ? nxt[t.kind][i + 2] : n; // at least one token inside` → `        let j = n; for (let k = i + 2; k < n; k++) if (toks[k].kind === t.kind && closes[k]) { j = k; break; }` | `src/lib/formatting.test.ts` | `1 failed \| 4 passed (5)` |
+| F10 | the preview reads a vertical tab and a form feed as the server does | `frontend/src/lib/formatting.ts`: `    if (c === 0x0b || c === 0x0c) out += "\n";` → `    if (c === 0x0b) out += "\n";` | `src/components/builder/review/text-preview-card.test.tsx` | `1 failed \| 5 passed (6)` |
 
-Once undone, each run passes again: `76 passed` (B rows), `4 passed (4)` (F1), `7 passed (7)` (F2), `3 passed (3)` (F3-F8).
+Once undone, each run passes again: `99 passed` (B1 to B14), `5 passed (5)` (F1, F9), `11 passed (11)` (F2), `6 passed (6)` (F3, F5, F8, F10), `3 passed (3)` (F4, F6, F7).
 
 ### Task 4: Verification (agent)
 
@@ -2588,7 +2889,7 @@ Once undone, each run passes again: `76 passed` (B rows), `4 passed (4)` (F1), `
 - [ ] **Step 1: The suites, as here and as CI runs them**
 
 Run: `.venv/bin/python -m pytest -q backend/tests 2>&1 | tail -1`; `.venv/bin/python -m pytest -q 2>&1 | tail -1` (the root, as CI's `backend` job); `.venv/bin/python -m pytest -m postgres -q --collect-only 2>&1 | tail -1`; the frontend suite; typecheck and lint; `(cd frontend && npm run build 2>&1 | grep -cE "Compiled successfully")`; `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git diff --exit-code frontend/src/lib/api >/dev/null; echo "drift $?"`
-**Expected:** `2367 passed, 50 skipped in <t>s`; `2398 passed, 50 skipped in <t>s` (CI's `backend` job); `50/2448 tests collected (2398 deselected) in <t>s` (CI's `backend-postgres` job runs these 50 on Postgres; no Postgres-only test is added, so it gives `50 passed, 2398 deselected`); `1158 passed (1158)` in `125 passed (125)` files; `typecheck 0`, `lint 0`; `1`; `drift 0` (no API change).
+**Expected:** `2390 passed, 50 skipped in <t>s`; `2421 passed, 50 skipped in <t>s` (CI's `backend` job: 2390 and `streamlit_tests`' 31); `50/2471 tests collected (2421 deselected) in <t>s` (CI's `backend-postgres` job runs these 50 on Postgres; no Postgres-only test is added, so it gives `50 passed, 2421 deselected`); `1162 passed (1162)` in `125 passed (125)` files; `typecheck 0`, `lint 0`; `1`; `drift 0` (no API change).
 
 - [ ] **Step 2: No em dash added, nothing frozen touched, the branch's paths**
 
@@ -2598,7 +2899,7 @@ git diff origin/main...HEAD -U0 -- . ':(exclude)docs' | grep '^+' | grep -v '^++
 git diff --name-only origin/main...HEAD | grep -cE '^(app\.py|streamlit_views/|streamlit_auth\.py|streamlit_tenancy\.py|ui_helpers\.py|streamlit_tests/|\.github/)'
 git diff --name-status origin/main...HEAD | cut -f1 | sort | uniq -c
 ```
-**Expected:** `0` (test sources spell the em dash `"\u2014"`); `0`; `11 A` and `19 M` (the nine new code files of T1 and T2 with the spec and this plan; the 18 modified code files of T1 and T2 with `docs/ops-runbook.md`, the Affirmation PR B record). Anything else: find why before the PR.
+**Expected:** `0` (test sources spell the em dash `"\u2014"`); `0`; `12 A` and `19 M` (the ten new code files of T1 and T2, the generated fuzz fixture among them, with the spec and this plan; the 18 modified code files of T1 and T2 with `docs/ops-runbook.md`, the Affirmation PR B record). Anything else: find why before the PR.
 
 ### Task 5: The PR, the merge, the after-deploy check, the phone check, the record (OWNER + agent)
 
@@ -2612,7 +2913,7 @@ git diff --name-status origin/main...HEAD | cut -f1 | sort | uniq -c
 
 (not replayed) `gh pr list -R <repo> --head claude/slice-2-plan-4q33le --state open --json number,url` → `[]`. Send the owner exactly this, and wait for a clear yes:
 
-> Text formatting is verified on this machine: 2367 backend tests here (2291 before), 1158 frontend tests in 125 files (1148 in 122), typecheck, lint and the production build clean. The text boxes take **bold**, *italic*, two heading sizes and simple lists, typed as `**bold**`, `*italic*`, `#`, `##`, `- ` and `1. `; they print in the Word files, the printed bulletin and the email's attachments. Each box has a short Formatting line under it, and the Review step has a text preview. Old services print exactly as before. No database change. May I open the pull request as a **draft** titled "Text formatting", so the checks run? Merging stays with you.
+> Text formatting is verified on this machine: 2390 backend tests here (2291 before), 1162 frontend tests in 125 files (1148 in 122), typecheck, lint and the production build clean. The text boxes take **bold**, *italic*, two heading sizes and simple lists, typed as `**bold**`, `*italic*`, `#`, `##`, `- ` and `1. `; they print in the Word files, the printed bulletin and the email's attachments. Each box has a short Formatting line under it, and the Review step has a text preview. Saved text with no formatting marks prints exactly as before; saved text with marks (a line starting "- " or "1. ", a word in asterisks, a line starting #) now prints formatted, as you accepted, and the preview shows it; a backslash before an asterisk keeps the asterisk. No database change. May I open the pull request as a **draft** titled "Text formatting", so the checks run? Merging stays with you.
 
 - [ ] **Step 3 (agent, on the owner's yes): Open the draft PR, watch CI, ask to mark it ready**
 
@@ -2622,17 +2923,17 @@ cat > "<scratch>/formatting-pr-body.md" <<'BODY'
 Text formatting (owner's decisions 3 to 5 of 2026-10-24). Spec: docs/superpowers/specs/2026-10-25-formatting-design.md. Plan: docs/superpowers/plans/2026-10-25-formatting.md. No migration, no API change (the OpenAPI snapshot is unchanged), no new package, no new variable. One PR: either deploy order is safe.
 
 - The grammar (backend/formatting.py; frontend/src/lib/formatting.ts mirrors it): **bold**, *italic* (a mark opens and closes only next to a non-space, never inside a word, so "Psalm 23:1*", "5 * 3" and "2*3*4" print as typed; \* escapes), "# " and "## " headings, "- " and "1. " list lines (numbers as typed), one level. No links, images, tables or code. The Call to Worship and the Assurance take bold and italic only, so their Leader and People lines split as today.
-- What prints: the liturgy cards, custom elements, the Affirmation's own text and the four free-text announcements, in the Word copies and the printed bulletin (PDF and Word), so the email's attachments. Headings bold Times 13 and 12 pt under the section's own heading, never Word's Heading styles; items with a hanging indent. People lines in the Call to Worship bold as before. Names, music, the sermon title, pasted readings and Settings stay as typed.
-- Old text prints exactly as before: text without a mark takes each renderer's old path (tests: the printed bulletin's lines and PDF bytes and Word XML against verbatim copies of the old helpers; the Word copy against the Streamlit characterization).
-- Safety: every span escaped in the PDF, runs as XML text in Word, React text in the preview; typed <b>, <script>, <img> and &amp; print and show as text. The scan is linear (20,000 characters of unclosed marks in milliseconds).
-- Pages: a Formatting line under each box (part of its description), and a Text preview on the Review step, closed at first, drawing each box as the printed bulletin prints it. shared/formatting.json (26 cases, the printed bulletin's own output) is checked by both sides, so the preview matches print.
-- AI: generation unchanged (plain text with Leader and People lines); the reviewer and the pews read the words without the marks; Revise keeps them.
-- Tests: planted violations B1-B11 and F1-F8 in the plan's Task 3.
+- What prints: the liturgy cards, custom elements, the Affirmation's own text and the four free-text announcements, in the Word copies and the printed bulletin (PDF and Word), so the email's attachments. Headings bold, never Word's Heading styles: 12 and 11 pt in the printed bulletin (in the case typed, under its 11 pt capital element headings; kept with what follows on a PDF page), 13 and 12 pt in the Word copy (the owner's answer 1). Items with a hanging indent. People lines bold in the Call to Worship only, as before (answer 2). Names, music, the sermon title, pasted readings and Settings stay as typed.
+- Old text (the owner's answer 3, accepted): text with no formatting marks prints exactly as before, by each renderer's old path (tests: the printed bulletin's lines and PDF bytes and Word XML against verbatim copies of the old helpers; the Word copy against the Streamlit characterization). Text with marks ("- x", "1. x", *word*, a line starting #, a backslash before one of those) now formats, and the preview shows it; \* keeps a literal asterisk (tests pin "- x", "1. x", *word* and a dashed announcement). The owner's count: 31 saved services, none with list-like lines, one with an asterisk before a letter.
+- Safety: every span escaped in the PDF, runs as XML text in Word, React text in the preview; typed <b>, <script>, <img> and &amp; print and show as text. The scan is linear (20,000 characters of unclosed marks in milliseconds). Word paragraphs are added in constant time (every box at its limit full of list items: about 20 s per Word file, 55 s without it).
+- Pages: a Formatting line under each box (part of its description), and a Text preview on the Review step, closed at first, drawing each box as the printed bulletin prints it, its text cleaned as the server cleans it. shared/formatting.json (35 cases) and shared/formatting_fuzz.json (300 seeded random texts), the printed bulletin's own output, are checked by both sides, so the preview matches print.
+- AI: generation unchanged (plain text with Leader and People lines); the reviewer and the pews read the words without the marks; Revise keeps them (tested through POST /liturgy/revise).
+- Tests: planted violations B1-B14 and F1-F10 in the plan's Task 3.
 - Rides along: the Affirmation PR B record in docs/ops-runbook.md.
 
 Before the merge: nothing (no migration). After the merge: the after-deploy check, a phone check, a "Formatting record" in docs/ops-runbook.md.
 
-Tests: backend/tests 2291 → 2367 passed (50 skipped); CI backend job 2322 → 2398 passed (with streamlit_tests' 31), 50 skipped; CI Postgres job 50 passed, 2322 → 2398 deselected; frontend 1148 → 1158 in 122 → 125 files
+Tests: backend/tests 2291 → 2390 passed (50 skipped); CI backend job 2322 → 2421 passed (with streamlit_tests' 31), 50 skipped; CI Postgres job 50 passed, 2322 → 2421 deselected; frontend 1148 → 1162 in 122 → 125 files
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -2642,7 +2943,7 @@ gh pr create -R <repo> --draft --base main --head claude/slice-2-plan-4q33le --t
 gh pr checks <N> -R <repo> --watch --interval 30
 ```
 
-Run the last line with `run_in_background: true` (or the session's GitHub tools, to the same effect). **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's `backend` job `2398 passed, 50 skipped`, its `backend-postgres` job `50 passed, 2398 deselected`, its `frontend` job `1158 passed` in 125 files. Then send: "PR #<N> is green: backend 2398 in CI (2367 plus the 31 old Streamlit tests), Postgres 50, frontend 1158 in 125 files, and the Vercel preview builds. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
+Run the last line with `run_in_background: true` (or the session's GitHub tools, to the same effect). **Expected:** the PR URL; every check `pass` (`backend`, `backend-postgres`, `frontend`, the Vercel preview); CI's `backend` job `2421 passed, 50 skipped`, its `backend-postgres` job `50 passed, 2421 deselected`, its `frontend` job `1162 passed` in 125 files. Then send: "PR #<N> is green: backend 2421 in CI (2390 plus the 31 old Streamlit tests), Postgres 50, frontend 1162 in 125 files, and the Vercel preview builds. May I mark it ready for review? Merging stays with you." On the yes: `gh pr ready <N> -R <repo>`.
 
 - [ ] **Step 4 (agent → OWNER): Ask to merge, then merge**
 
@@ -2696,7 +2997,7 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' <app>/builder/review
 
 - [ ] **Step 12 (OWNER, then agent): Phone 7: an old service**
 
-> Open **Services**, open a service saved before today and download its printed bulletin. Does it look as it always has?
+> Open **Services**, open a service saved before today and download its printed bulletin. Does it look as it always has? (Text with no formatting marks prints as before; a line you once typed starting with a dash and a space would now print as a bullet, as agreed.)
 
 - [ ] **Step 13 (OWNER, then agent): Phone 8: tidy up**
 
@@ -2704,7 +3005,7 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' <app>/builder/review
 
 Write each step's result, with the date, into `<scratch>/formatting-results.md` (not committed). A problem the owner reports is a follow-up for the record (and for the owner to decide), not a change made now.
 
-**What the phone check cannot show.** The email's attachments (the same files as the downloads; `test_the_email_s_attachments_read_the_marks`), the dialogue boxes' rules, typed HTML (`test_nothing_typed_becomes_markup`, F3), old text byte for byte (B1, B2), the reviewer's and the pews' plain words (B10) and the preview's parity with print in every case (the shared fixture, F1).
+**What the phone check cannot show.** The email's attachments (the same files as the downloads; `test_the_email_s_attachments_read_the_marks`), the dialogue boxes' rules, typed HTML (`test_nothing_typed_becomes_markup`, F3), old text byte for byte (B1, B2) and the changes to old text with marks (`test_old_text_with_a_mark_now_prints_formatted`), the reviewer's and the pews' plain words (B10), Revise's marks (B12), a heading at a page's foot (B13) and the preview's parity with print in every case (the shared fixtures, F1).
 
 - [ ] **Step 14 (agent): Write the record**
 
@@ -2775,4 +3076,4 @@ git push origin claude/slice-2-plan-4q33le
 
 - A toolbar for the marks (D 4: may come later).
 - A plain-text line in the default voice prompt, if AI drafts start carrying marks (S "AI interplay").
-- "People:" lines in bold outside the Call to Worship, if the owner wants it (S Questions, 2).
+- A faster PDF for a box of thousands of short lines in one paragraph (ReportLab rewraps it on every page it crosses: 35 s for one box of 10,000 one-letter lines, before and after this change; S "Limits").
