@@ -18,7 +18,7 @@
 
 "T<n>" means Task n. `<repo>` is the GitHub repository of this checkout's `origin` (owner/name), `<api>` the production API's address, `<app>` the production app's address, `<scratch>` the session's scratchpad path and `<N>` the PR's number; write each out when running a command, never into a committed file.
 
-- Run commands from the repo root. Backend: `.venv/bin/python -m pytest -q <paths> 2>&1 | tail -1`. Frontend: one file `(cd frontend && npx vitest run <paths> 2>&1 | grep -E "Test Files|Tests ")`, the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`, and `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`. A time in an expected output is `<t>`. No foreground `sleep`.
+- Run commands from the repo root. Backend: `.venv/bin/python -m pytest -q <paths> 2>&1 | tail -1`. Frontend: one file `(cd frontend && npx vitest run <paths> 2>&1 | grep -E "^ +(Test Files|Tests) ")`, the suite `(cd frontend && npx vitest run 2>&1 | grep -E "^ +× |FAIL|Test Files|Tests ")`, and `(cd frontend && npx tsc --noEmit >/dev/null 2>&1; echo "typecheck $?"; npm run lint >/dev/null 2>&1; echo "lint $?")`. A time in an expected output is `<t>`. No foreground `sleep`.
 - **One PR**, no migration, no new package, no new variable, no generated file changes (`openapi.json` and `schema.d.ts` stay as they are: T4 checks). Branch `claude/slice-2-plan-4q33le`. Stage files by name; never `git add -A`; nothing under `.claude/` is staged.
 - Every commit message has a subject, a body and, as its last paragraph (a separate `-m`), these two lines:
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
@@ -541,8 +541,8 @@ def test_the_reviewer_and_the_pews_read_the_words_without_the_marks(tmp_db, make
 
 - [ ] **Step 2: Run them and see them fail**
 
-Run: `.venv/bin/python -m pytest -q backend/tests/test_formatting.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_usecase_liturgy_revise.py 2>&1 | tail -1`
-**Expected:** @@T1_FAIL@@
+Run: `.venv/bin/python -m pytest -q backend/tests/test_formatting.py 2>&1 | grep -E "^E +ModuleNotFoundError|error in"`, then `.venv/bin/python -m pytest -q backend/tests/test_no_streamlit_in_core.py backend/tests/test_usecase_liturgy_revise.py 2>&1 | tail -1`
+**Expected:** `E   ModuleNotFoundError: No module named 'formatting'` and `1 error in <t>s`; then `3 failed, 5 passed in <t>s` (the core-imports list names `formatting`; Revise's instruction does not keep the marks yet, in two tests).
 
 - [ ] **Step 3: Write the module and the printing**
 
@@ -1433,8 +1433,8 @@ def _note(note) -> NoteOut:
 
 - [ ] **Step 4: Run them and the suite**
 
-Run: the Step 2 command, then `.venv/bin/python -m pytest -q backend/tests 2>&1 | tail -1`
-**Expected:** @@T1_PASS@@, then `2367 passed, 50 skipped in <t>s`.
+Run: `.venv/bin/python -m pytest -q backend/tests/test_formatting.py backend/tests/test_no_streamlit_in_core.py backend/tests/test_usecase_liturgy_revise.py 2>&1 | tail -1`, then `.venv/bin/python -m pytest -q backend/tests 2>&1 | tail -1`
+**Expected:** `84 passed in <t>s`, then `2367 passed, 50 skipped in <t>s`.
 
 - [ ] **Step 5: Commit and push**
 
@@ -1600,7 +1600,7 @@ describe("the formatting help line (formatting spec)", () => {
   });
 
   it("names the marks without an em dash", () => {
-    for (const copy of [FORMATTING_HELP, DIALOGUE_HELP]) expect(copy).not.toContain("—");
+    for (const copy of [FORMATTING_HELP, DIALOGUE_HELP]) expect(copy).not.toContain("\u2014");
     expect(FORMATTING_HELP).toContain("**bold**");
     expect(FORMATTING_HELP).toContain("# Heading");
   });
@@ -1711,7 +1711,7 @@ describe("the text preview (formatting spec)", () => {
     const other = within(card).getByRole("region", { name: "Other announcements" });
     expect(style(within(other).getByText("This week"))).toBe("center_heading1");
     expect(within(card).queryByRole("region", { name: "Benediction" })).toBeNull(); // blank: nothing prints
-    expect(card.textContent).not.toContain("—");
+    expect(card.textContent).not.toContain("\u2014");
   });
 
   it("shows what is typed as text, never as markup", async () => {
@@ -1858,8 +1858,8 @@ import { Toaster } from "@/components/ui/sonner";
 
 - [ ] **Step 2: Run them and see them fail**
 
-Run: `(cd frontend && npx vitest run src/lib/formatting.test.ts src/components/builder/formatting-help.test.tsx src/components/builder/review/text-preview-card.test.tsx src/components/builder/liturgy/affirmation-card.test.tsx src/components/builder/liturgy/liturgy-step.test.tsx src/components/builder/liturgy/review-step.test.tsx src/components/builder/review/review-send-step.test.tsx 2>&1 | grep -E "Test Files|Tests ")`
-**Expected:** @@T2_FAIL@@
+Run: `(cd frontend && npx vitest run src/lib/formatting.test.ts src/components/builder/formatting-help.test.tsx src/components/builder/review/text-preview-card.test.tsx src/components/builder/liturgy/affirmation-card.test.tsx src/components/builder/liturgy/liturgy-step.test.tsx src/components/builder/liturgy/review-step.test.tsx src/components/builder/review/review-send-step.test.tsx 2>&1 | grep -E "^ +(Test Files|Tests) ")`
+**Expected:** `Test Files  7 failed (7)` and `Tests  1 failed | 30 passed (31)` (six files cannot import `./formatting`, `./formatting-help` or `./text-preview-card` yet; the Review step's headings miss "Text preview").
 
 - [ ] **Step 3: Write the mirror, the help line and the preview**
 
@@ -1888,7 +1888,7 @@ type Block = { kind: Kind; spans: Span[]; marker: string };
 
 export const BULLET = "•";
 const ESCAPABLE = "*#-.";
-const SPACE = " \t ";
+const SPACE = " \t\u00a0";
 const ALNUM = /^[A-Za-z0-9]$/;
 // [\s\S], not ".": Python's "." takes every character but "\n", and a line has none.
 const HEADING = /^(#{1,2}) ([\s\S]*)$/;
@@ -2047,7 +2047,7 @@ export function hasMarks(text: string, inlineOnly = false): boolean {
 // --- How printed_bulletin prints a box ---
 
 /** Python's `str.isspace` characters, so `pyStrip` trims as `str.strip()` does. */
-const PY_SPACE = "\t\n\u000b\u000c\r\u001c\u001d\u001e\u001f \u0085                 　";
+const PY_SPACE = "\t\n\u000b\u000c\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000";
 const PY_SPACE_CLASS = "[\\t\\n\\u000b\\u000c\\r\\u001c-\\u001f \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]";
 function pyStrip(s: string): string {
   let a = 0;
@@ -2538,7 +2538,7 @@ import { TextPreviewCard } from "./text-preview-card";
 - [ ] **Step 4: Run them, the suite, typecheck and lint**
 
 Run: the Step 2 command; the frontend suite; typecheck and lint.
-**Expected:** @@T2_PASS@@; `1158 passed (1158)` in `125 passed (125)` files; `typecheck 0`, `lint 0`.
+**Expected:** `Test Files  7 passed (7)` and `Tests  121 passed (121)`; `1158 passed (1158)` in `125 passed (125)` files; `typecheck 0`, `lint 0`.
 
 - [ ] **Step 5: Commit and push**
 
@@ -2553,7 +2553,7 @@ git push origin claude/slice-2-plan-4q33le
 
 **Files:** none (each change is undone with `git checkout -- <file>`).
 
-Each row: make the change (the quoted text occurs once in the file unless the row says otherwise), run, see the expected failure, undo, run again (it passes), then `git status --short` is empty. Backend rows run `.venv/bin/python -m pytest -q <files> 2>&1 | tail -1`; frontend rows `(cd frontend && npx vitest run <files> 2>&1 | grep -E "Tests ")`.
+Each row: make the change (the quoted text occurs once in the file unless the row says otherwise), run, see the expected failure, undo, run again (it passes), then `git status --short` is empty. Backend rows run `.venv/bin/python -m pytest -q <files> 2>&1 | tail -1`; frontend rows `(cd frontend && npx vitest run <files> 2>&1 | grep -E "^ +Tests ")`.
 
 In the Change column, `⏎` is a line break in the quoted text.
 
@@ -2566,7 +2566,7 @@ In the Change column, `⏎` is a line break in the quoted text.
 | B5 | `*x*` is italic | same line → `walk(i + 1, j, bold or kind == "**", italic)` | same | `9 failed, 67 passed` |
 | B6 | only `#` and `##` are headings | `backend/formatting.py`: `_HEADING = re.compile(r"(#{1,2}) (.*)")` → `_HEADING = re.compile(r"(#{1,3}) (.*)")` | same | `5 failed, 71 passed` |
 | B7 | a list line needs "- " | `backend/formatting.py`: `_BULLET = re.compile(r"- (.*)")` → `_BULLET = re.compile(r"- ?(.*)")` | same | `5 failed, 71 passed` |
-| B8 | a literal `*` in normal text is unaffected ("5 * 3 * 2") | `backend/formatting.py`: `_SPACE = " \t "` → `_SPACE = "\t"` | same | `4 failed, 72 passed` |
+| B8 | a literal `*` in normal text is unaffected ("5 * 3 * 2") | `backend/formatting.py`: `_SPACE = " \t\u00a0"` → `_SPACE = "\t"` | same | `4 failed, 72 passed` |
 | B9 | no HTML or XML injection in the PDF | `backend/printed_pdf.py`: `        text = escape(to_pdf_text(span.text)).replace("\n", "<br/>")` → `        text = to_pdf_text(span.text).replace("\n", "<br/>")` | same | `1 failed, 75 passed` |
 | B10 | the reviewer and the pews read the words without the marks | `backend/api/routes/liturgy_review.py`: `                                      formatting.plain(c.text, inline_only=c.section in formatting.INLINE_ONLY))` → `                                      c.text)` | same | `1 failed, 75 passed` |
 | B11 | the limit's 20,000 characters read quickly (linear scan) | `backend/formatting.py`: `                j = nxt[kind][i + 2] if i + 2 <= n else n          # at least one token inside` → `                j = next((k for k in range(i + 2, n) if toks[k][0] == kind and closes[k]), n)` | same | `1 failed, 75 passed` |
@@ -2575,7 +2575,7 @@ In the Change column, `⏎` is a line break in the quoted text.
 | F3 | no HTML injection in the preview | `frontend/src/components/builder/review/text-preview-card.tsx`: `          <span key={i} className={cn(s.bold && "font-bold", s.italic && "italic")}>⏎            {s.text}⏎          </span>` → `          <span key={i} className={cn(s.bold && "font-bold", s.italic && "italic")} dangerouslySetInnerHTML={{ __html: s.text }} />` | `src/components/builder/review/text-preview-card.test.tsx` | `1 failed \| 2 passed (3)` |
 | F4 | the help line under each prayer card | `frontend/src/components/builder/liturgy/section-card.tsx`: delete the line `          <FormattingHelp id={`card-${key}-formatting`} dialogue={INLINE_ONLY.has(key)} />` | `src/components/builder/formatting-help.test.tsx` | `1 failed \| 2 passed (3)` |
 | F5 | 44 px at 375 px (the preview's toggle) | `frontend/src/components/builder/review/text-preview-card.tsx`: `<CollapsibleTrigger className="flex min-h-11 items-center` → `<CollapsibleTrigger className="flex items-center` | `src/components/builder/review/text-preview-card.test.tsx` | `3 failed (3)` |
-| F6 | no em dash in user-facing copy | `frontend/src/components/builder/formatting-help.tsx`: `for a list. Preview on the Review step.";` → `for a list — preview on the Review step.";` | `src/components/builder/formatting-help.test.tsx` | `1 failed \| 2 passed (3)` |
+| F6 | no em dash in user-facing copy | `frontend/src/components/builder/formatting-help.tsx`: `for a list. Preview on the Review step.";` → `for a list \u2014 preview on the Review step.";` | `src/components/builder/formatting-help.test.tsx` | `1 failed \| 2 passed (3)` |
 | F7 | no help line under a name box | `frontend/src/components/builder/bulletin/bulletin-step.tsx`: `        const help = long ? `bulletin-${key}-formatting` : null;` → `        const help = `bulletin-${key}-formatting`;` | `src/components/builder/formatting-help.test.tsx` | `1 failed \| 2 passed (3)` |
 | F8 | a blank box is left out of the preview (it prints nothing) | `frontend/src/components/builder/review/text-preview-card.tsx`: `    if (text) boxes.push({ id, label, box, text });` → `    boxes.push({ id, label, box, text });` | `src/components/builder/review/text-preview-card.test.tsx` | `2 failed \| 1 passed (3)` |
 
@@ -2588,7 +2588,7 @@ Once undone, each run passes again: `76 passed` (B rows), `4 passed (4)` (F1), `
 - [ ] **Step 1: The suites, as here and as CI runs them**
 
 Run: `.venv/bin/python -m pytest -q backend/tests 2>&1 | tail -1`; `.venv/bin/python -m pytest -q 2>&1 | tail -1` (the root, as CI's `backend` job); `.venv/bin/python -m pytest -m postgres -q --collect-only 2>&1 | tail -1`; the frontend suite; typecheck and lint; `(cd frontend && npm run build 2>&1 | grep -cE "Compiled successfully")`; `.venv/bin/python backend/scripts/export_openapi.py >/dev/null && (cd frontend && npm run gen:api >/dev/null 2>&1) && git diff --exit-code frontend/src/lib/api >/dev/null; echo "drift $?"`
-**Expected:** @@T4_S1@@
+**Expected:** `2367 passed, 50 skipped in <t>s`; `2398 passed, 50 skipped in <t>s` (CI's `backend` job); `50/2448 tests collected (2398 deselected) in <t>s` (CI's `backend-postgres` job runs these 50 on Postgres; no Postgres-only test is added, so it gives `50 passed, 2398 deselected`); `1158 passed (1158)` in `125 passed (125)` files; `typecheck 0`, `lint 0`; `1`; `drift 0` (no API change).
 
 - [ ] **Step 2: No em dash added, nothing frozen touched, the branch's paths**
 
@@ -2598,7 +2598,7 @@ git diff origin/main...HEAD -U0 -- . ':(exclude)docs' | grep '^+' | grep -v '^++
 git diff --name-only origin/main...HEAD | grep -cE '^(app\.py|streamlit_views/|streamlit_auth\.py|streamlit_tenancy\.py|ui_helpers\.py|streamlit_tests/|\.github/)'
 git diff --name-status origin/main...HEAD | cut -f1 | sort | uniq -c
 ```
-**Expected:** @@T4_S2@@
+**Expected:** `0` (test sources spell the em dash `"\u2014"`); `0`; `11 A` and `19 M` (the nine new code files of T1 and T2 with the spec and this plan; the 18 modified code files of T1 and T2 with `docs/ops-runbook.md`, the Affirmation PR B record). Anything else: find why before the PR.
 
 ### Task 5: The PR, the merge, the after-deploy check, the phone check, the record (OWNER + agent)
 
@@ -2760,41 +2760,16 @@ git push origin claude/slice-2-plan-4q33le
 
 ## Build notes
 
-**How this plan was written (2026-10-22).** Each task's code was built and run in a throwaway worktree of `07826aa` (in the session scratchpad, outside the repo directory; a hard-linked copy of `frontend/node_modules`). The directives were generated from that worktree by a script (a new file as **Create**; every change as **In … replace** with just enough whole-line context to occur once in the file as it stands at that point), and the plan was then **replayed**.
-
-**Replay result: green.** On a fresh worktree of the plan's commit `18dfbbf` (in the session scratchpad), all 45 directives of T1-T3 were applied from this file by the replay script (none failed to match once), every "Run:" of T1-T3 and T5 was run, and its output is pasted above as the step's **Expected** (absolute paths as `<frontend>`). Each Step 2 failed as quoted and each later check passed as quoted. The replayed frontend was byte-identical to the build worktree's. Counts: frontend 1084 in 116 files → **1093** in 117 (T1) → **1095** in 118 (T2) → **1099** in 119 (T3); typecheck and lint clean after each task; `npm ci` with the new lockfile entry exited 0; the production build compiled with `/apple-icon.png`, `/icon.svg` and `/manifest.webmanifest`. The three commits of T1-T3 (by the plan's `git add` lists) left the worktree clean; T5 gave `0` (no backend, Streamlit or CI file), `0` em dashes, and `15 A`, `26 M`. The backend docs tests that T7 Step 11 runs: `89 passed`. T4 was replayed too: the harness built, the manifest answered `200` with no redirect, `/builder` `307` to sign in, and all 12 screenshots had no sideways scroll. **Not replayed:** T6 (no commands) and T7 (GitHub, the owner, production).
-
-**The visual check (T4) as seen while planning.** Light and dark at 375 px and 1280 px: Figtree throughout; filled, tonal, outlined, text, destructive and link buttons readable; the selected chip filled, the rest outlined (from `md` the Settings column reads as a navigation drawer); cards raised; fields with a clear edge; warning and error lines readable; the cover frame light in dark mode; the Save bar on its own surface; `/login` and `/join` centered on the surface. Nothing needed fixing.
-
-**Contrast (from `tokens.test.ts`'s pairs; light / dark).** Lowest text pair 5.27 / 7.24; foreground on background 16.31 / 14.32; on-primary on primary 6.50 / 7.72; secondary chip text on its container 7.24 / 7.24; primary on background 6.19 / 10.83; muted text on muted 7.62 / 8.48; warning on background 6.13 / 10.89; destructive on background 6.15 / 10.89; field edges at least 3.68 / 4.56. Every pair passes in both modes.
+**How this plan was written (2026-10-25).** The code was built and run in a throwaway worktree in the session scratchpad (the repo's `.venv` linked in, a hard-linked copy of `frontend/node_modules`). The directives were generated from that worktree by a script (a new file as **Create**; every change as **In … replace** with just enough whole-line context to occur once in the file as it stands at that point), and the plan was then **replayed** from this file as committed.
 
 **While building:**
-- `@material/material-color-utilities` 0.4.0 imports its own files without `.js`, so plain Node cannot load it; 0.3.0 loads and its tonal-spot scheme reproduces the owner's drawn values to within a step or two (S "How the colors are made").
-- `npm install --save-dev` on this machine rewrote about 150 unrelated lockfile lines (npm dropped the `libc` fields); the plan adds the two lockfile entries by directive and checks them with `npm ci`.
-- One existing test recognized the outline button by `bg-background`; it now reads `border-input` (clarification 8). No other existing test changed: the 44 px class checks (`h-11`, `md:h-9`, `min-h-11`) and the step links' text ("1 Date & readings 1 of 3") are kept by design.
-- TypeScript inferred the generator's token object as `{ warning: string }`; JSDoc types on `themeTokens` fixed it.
-- A literal em dash in a test source would trip T5 Step 3, so the manifest test builds the character with `String.fromCharCode(0x2014)`.
+- The first scan looked for each opener's close from scratch: quadratic, about a minute on a 20,000-character line of `*a `. The plan's scan finds each kind's next close in one pass (clarification 9; `test_a_long_text_full_of_unclosed_marks_reads_quickly`, B11).
+- ReportLab's default bullet font is Helvetica; the item style names Times (`bulletFontName`), as the rest of the page. pypdf reads that bullet as `"\x7f"`, so the tests' `_pdf_text` maps it back to "•".
+- Both sides spell Python's whitespace set and word characters out, so the preview splits Leader and People parts and trims exactly as `str.strip()` and `\b` do. The TypeScript uses no lookbehind (older Safari has none).
+- The existing tests that pin a box's full accessible description (the Affirmation's own text, the Call to Worship, the Assurance, the Benediction) and the Review step's headings now include the help line and "Text preview" (T2 Step 1).
+- Test sources spell the em dash as an escape (`"—"`), so T4's count finds none in the added lines.
 
-**Planted violations** (each planted in the build worktree with T1-T3 applied, the named test file run, the change undone; all 11 were caught):
-
-| # | Planted violation | Test file | Result |
-|---|---|---|---|
-| P1 | a hand edit of `--primary` in the generated block | `tokens.test.ts` | caught: 4 failed |
-| P2 | `--muted-foreground` set to the outline color by hand | `tokens.test.ts` | caught: 3 failed |
-| P3 | the role map changed to `muted-foreground: outline` and the block regenerated (so only contrast can catch it) | `tokens.test.ts` | caught: 1 failed (light text pairs) |
-| P4 | the dark variant no longer skips `.paper` | `tokens.test.ts` | caught: 1 failed |
-| P5 | `.paper` given the dark background | `tokens.test.ts` | caught: 2 failed |
-| P6 | the cover preview without `paper` | `bulletin-step.test.tsx` | caught: 1 failed |
-| P7 | `bg-white/95` on the step footer | `colors.test.ts` | caught: 1 failed |
-| P8 | `manifest.webmanifest` dropped from the proxy matcher | `icons.test.ts` | caught: 1 failed |
-| P9 | the 192 px icon declared as 196x196 | `icons.test.ts` | caught: 1 failed |
-| P10 | the dark `theme-color` set to black | `icons.test.ts` | caught: 1 failed |
-| P11 | the outline button back to the kit's `border-border bg-background` | `review-send-step.test.tsx` | caught: 1 failed |
-
-## Follow-ups
-
-1. Theme PR 2: the bottom navigation bar on phones and gentle motion (D follow-up 1 and planning answer 3).
-2. If the owner prefers a different icon mark (S "Questions for the owner"), change the geometry in `scripts/generate-icons.mjs`, run it, and commit its files; the tests need no change.
+@@REPLAY@@
 
 ## Follow-ups
 
