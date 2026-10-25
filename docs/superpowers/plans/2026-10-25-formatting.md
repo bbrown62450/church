@@ -2767,7 +2767,7 @@ git push origin claude/slice-2-plan-4q33le
 - ReportLab's default bullet font is Helvetica; the item style names Times (`bulletFontName`), as the rest of the page. pypdf reads that bullet as `"\x7f"`, so the tests' `_pdf_text` maps it back to "•".
 - Both sides spell Python's whitespace set and word characters out, so the preview splits Leader and People parts and trims exactly as `str.strip()` and `\b` do. The TypeScript uses no lookbehind (older Safari has none).
 - The existing tests that pin a box's full accessible description (the Affirmation's own text, the Call to Worship, the Assurance, the Benediction) and the Review step's headings now include the help line and "Text preview" (T2 Step 1).
-- Test sources spell the em dash as an escape (`"—"`), so T4's count finds none in the added lines.
+- Test sources spell the em dash as an escape (`"\u2014"`), so T4's count finds none in the added lines.
 
 @@REPLAY@@
 
