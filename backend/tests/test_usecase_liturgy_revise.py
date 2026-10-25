@@ -15,7 +15,9 @@ from usecases import liturgy_review
 SECRET = "sk-secret upstream detail"
 NOTES = ['Stock phrase "as we journey". Say it more naturally.', "The second line is hard to say aloud."]
 INSTRUCTION = ("Revise this draft to address these notes only. Keep everything that works. Keep the same form "
-               "(Leader/People lines where present) and about the same length. Output only the revised text.")
+               "(Leader/People lines where present) and about the same length. Keep any formatting marks the draft "
+               "has (**bold**, *italic*, lines starting # or ## for headings, - or 1. for lists) where they still "
+               "fit, and add none. Output only the revised text.")
 
 
 @pytest.fixture

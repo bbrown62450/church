@@ -40,8 +40,10 @@ RIGHT_COLUMN = 120.0                   # the leader's column on an element line
 # (a section heading: itself, an element and a line; an element: itself and
 # two lines), so no heading ends a page alone and a long reading still starts
 # under its heading instead of leaving a gap (keepWithNext would move the
-# whole reading to the next page).
-KEEP = {"section": 60.0, "element": 47.0}
+# whole reading to the next page). A box's own heading (formatting spec),
+# centered or not: itself and two lines.
+KEEP = {"section": 60.0, "element": 47.0, "heading1": 47.0, "heading2": 45.0,
+        "center_heading1": 47.0, "center_heading2": 45.0}
 
 _GRAY = Color(0.45, 0.45, 0.45)
 # The cover picture's resolution: print quality.
@@ -93,6 +95,18 @@ STYLES = {
     "center": _style("center", alignment=TA_CENTER, spaceBefore=3),
     "right": _style("right", alignment=TA_RIGHT),
     "page": _style("page", alignment=TA_CENTER),
+    # Formatting (formatting spec; the owner's answer 1 of 2026-10-25): a box's
+    # own headings, bold (printed_bulletin makes every span bold) at 12 pt and
+    # 11 pt in the case typed, and its list items. They sit under the
+    # element's heading, which is 11 pt bold in capitals with the leader's
+    # name at the right: "heading2" is the element heading's size and differs
+    # by its case, "heading1" a point larger, so the capitals keep the
+    # element's heading the higher level.
+    "heading1": _style("heading1", fontSize=12, leading=15, spaceBefore=6),
+    "heading2": _style("heading2", fontSize=11, leading=13, spaceBefore=6),
+    "item": _style("item", leftIndent=18, bulletIndent=0, bulletFontName="Times-Roman", bulletFontSize=11),
+    "center_heading1": _style("center_heading1", fontSize=12, leading=15, spaceBefore=6, alignment=TA_CENTER),
+    "center_heading2": _style("center_heading2", fontSize=11, leading=13, spaceBefore=6, alignment=TA_CENTER),
 }
 
 
@@ -114,7 +128,9 @@ def _flowables(line: pb.Line, width: float) -> list[Flowable]:
 
 
 def _flowable(line: pb.Line, width: float) -> Flowable:
-    paragraph = Paragraph(_markup(line), STYLES[line.style])
+    # An item's marker is "•" or a typed number (formatting.parse), never the user's other text.
+    bullet = {"bulletText": to_pdf_text(line.marker)} if line.marker else {}
+    paragraph = Paragraph(_markup(line), STYLES[line.style], **bullet)
     if not line.right:
         return paragraph
     right = Paragraph(escape(to_pdf_text(line.right)), STYLES["right"])

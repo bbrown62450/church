@@ -1,0 +1,134 @@
+{
+ "_about": "Formatting spec, 2026-10-25: each box's text as the printed bulletin prints it (printed_bulletin.formatted, _leader_people, _assurance); a span is [text, flags], flags \"b\" bold, \"i\" italic. backend/tests/test_formatting.py and frontend/src/lib/formatting.test.ts check every case; the Review step's preview draws these lines.",
+ "assurance_response": "People: Thanks be to God! Amen.",
+ "cases": [
+  {"name": "plain text prints as one line, as typed", "box": "prayer", "text": "Gracious God,\nwe gather in your name.\n\nAmen.",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["Gracious God,\nwe gather in your name.\n\nAmen.", ""]]}]},
+  {"name": "a lone asterisk after a verse", "box": "prayer", "text": "Psalm 23:1*",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["Psalm 23:1*", ""]]}]},
+  {"name": "a hash before a number", "box": "prayer", "text": "#1 hymn: we sing it again",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["#1 hymn: we sing it again", ""]]}]},
+  {"name": "asterisks with spaces round them", "box": "prayer", "text": "5 * 3 * 2 = 30 blessings",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["5 * 3 * 2 = 30 blessings", ""]]}]},
+  {"name": "asterisks between digits", "box": "prayer", "text": "2*3*4 and a lone ** pair",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["2*3*4 and a lone ** pair", ""]]}]},
+  {"name": "a mark touching a letter outside does not open or close", "box": "prayer", "text": "a**b**c and **God**s love",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["a**b**c and **God**s love", ""]]}]},
+  {"name": "bold and italic", "box": "prayer", "text": "We praise you, **Holy One**, for *all* your gifts.",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["We praise you, ", ""], ["Holy One", "b"], [", for ", ""], ["all", "i"], [" your gifts.", ""]]}]},
+  {"name": "italic inside bold, bold inside italic", "box": "prayer", "text": "**a *b* c** and *d **e** f*",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["a ", "b"], ["b", "bi"], [" c", "b"], [" and ", ""], ["d ", "i"], ["e", "bi"], [" f", "i"]]}]},
+  {"name": "a backslash prints the mark itself", "box": "prayer", "text": "Not \\*italic\\*, not \\*\\*bold\\*\\*; a back\\slash stays",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["Not *italic*, not **bold**; a back\\slash stays", ""]]}]},
+  {"name": "a mark never spans a line", "box": "prayer", "text": "**open\nclose**",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["**open\nclose**", ""]]}]},
+  {"name": "headings, text and lists", "box": "prayer", "text": "# For the world\nWe pray for peace.\n## Near and far\n- the sick\n- the lonely\n\nHear us, O God.",
+   "lines": [
+    {"style": "heading1", "marker": "", "spans": [["For the world", "b"]]},
+    {"style": "body", "marker": "", "spans": [["We pray for peace.", ""]]},
+    {"style": "heading2", "marker": "", "spans": [["Near and far", "b"]]},
+    {"style": "item", "marker": "•", "spans": [["the sick", ""]]},
+    {"style": "item", "marker": "•", "spans": [["the lonely", ""]]},
+    {"style": "body", "marker": "", "spans": [["Hear us, O God.", ""]]}]},
+  {"name": "numbers stay as typed", "box": "prayer", "text": "3. Third\n10. Tenth\n1234. Not a list\n1) Not a list",
+   "lines": [
+    {"style": "item", "marker": "3.", "spans": [["Third", ""]]},
+    {"style": "item", "marker": "10.", "spans": [["Tenth", ""]]},
+    {"style": "body", "marker": "", "spans": [["1234. Not a list\n1) Not a list", ""]]}]},
+  {"name": "not a heading or a list", "box": "prayer", "text": "### three\n#none\n-none\n* star\n# \n- ",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["### three\n#none\n-none\n* star\n# \n- ", ""]]}]},
+  {"name": "blank lines round a block are dropped, inside text they stay", "box": "prayer", "text": "\n\nFirst\n\n\nSecond\n\n# Heading\n\n\n",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["First\n\n\nSecond", ""]]},
+    {"style": "heading1", "marker": "", "spans": [["Heading", "b"]]}]},
+  {"name": "marks inside a heading and an item", "box": "prayer", "text": "# The *Holy* Spirit\n- **all** who mourn",
+   "lines": [
+    {"style": "heading1", "marker": "", "spans": [["The ", "b"], ["Holy", "bi"], [" Spirit", "b"]]},
+    {"style": "item", "marker": "•", "spans": [["all", "b"], [" who mourn", ""]]}]},
+  {"name": "HTML and XML print as text", "box": "prayer", "text": "<b>x</b> & <script>alert(1)</script> **<i>y</i> & z**",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["<b>x</b> & <script>alert(1)</script> ", ""], ["<i>y</i> & z", "b"]]}]},
+  {"name": "the confession is all bold, italic added", "box": "confession", "text": "We confess *our sin*.\n- pride\n# Mercy",
+   "lines": [
+    {"style": "bold", "marker": "", "spans": [["We confess ", "b"], ["our sin", "bi"], [".", "b"]]},
+    {"style": "item", "marker": "•", "spans": [["pride", "b"]]},
+    {"style": "heading1", "marker": "", "spans": [["Mercy", "b"]]}]},
+  {"name": "dialogue as before", "box": "dialogue", "text": "Leader: The Lord be with you.\nPeople: And also with you.",
+   "lines": [
+    {"style": "hanging", "marker": "", "spans": [["Leader: ", ""], ["The Lord be with you.", ""]]},
+    {"style": "hanging", "marker": "", "spans": [["People: ", "b"], ["And also with you.", "b"]]}]},
+  {"name": "dialogue with marks", "box": "dialogue", "text": "Leader: Come, **all** who are weary.\nPeople: We come *gladly*.",
+   "lines": [
+    {"style": "hanging", "marker": "", "spans": [["Leader: ", ""], ["Come, ", ""], ["all", "b"], [" who are weary.", ""]]},
+    {"style": "hanging", "marker": "", "spans": [["People: ", "b"], ["We come ", "b"], ["gladly", "bi"], [".", "b"]]}]},
+  {"name": "dialogue takes no headings or lists", "box": "dialogue", "text": "# Not a heading\nLeader: - not a list\nPeople: 1. not a list",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["# Not a heading", ""]]},
+    {"style": "hanging", "marker": "", "spans": [["Leader: ", ""], ["- not a list", ""]]},
+    {"style": "hanging", "marker": "", "spans": [["People: ", "b"], ["1. not a list", "b"]]}]},
+  {"name": "dialogue with no label", "box": "dialogue", "text": "Come and *worship*.",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["Come and ", ""], ["worship", "i"], [".", ""]]}]},
+  {"name": "dialogue mid-line label", "box": "dialogue", "text": "Leader: Lift up your hearts. People: We lift them **up**.",
+   "lines": [
+    {"style": "hanging", "marker": "", "spans": [["Leader: ", ""], ["Lift up your hearts.", ""]]},
+    {"style": "hanging", "marker": "", "spans": [["People: ", "b"], ["We lift them up.", "b"]]}]},
+  {"name": "assurance as before", "box": "assurance", "text": "Leader: In Christ we are forgiven.",
+   "lines": [
+    {"style": "hanging", "marker": "", "spans": [["Leader: ", ""], ["In Christ we are forgiven.", ""]]},
+    {"style": "bold", "marker": "", "spans": [["People: Thanks be to God! Amen.", "b"]]}]},
+  {"name": "assurance with marks, typed People left out", "box": "assurance", "text": "Leader: In **Christ** we are *forgiven*. People: Thanks be to God!",
+   "lines": [
+    {"style": "hanging", "marker": "", "spans": [["Leader: ", ""], ["In ", ""], ["Christ", "b"], [" we are ", ""], ["forgiven", "i"], [".", ""]]},
+    {"style": "bold", "marker": "", "spans": [["People: Thanks be to God! Amen.", "b"]]}]},
+  {"name": "announcement as before", "box": "announcement", "text": "Tuesday: Bible study\nWednesday: Choir",
+   "lines": [
+    {"style": "center", "marker": "", "spans": [["Tuesday: Bible study\nWednesday: Choir", ""]]}]},
+  {"name": "announcement with a heading and a list", "box": "announcement", "text": "# This week\n- Tuesday: **Bible study**\n2. Choir",
+   "lines": [
+    {"style": "center_heading1", "marker": "", "spans": [["This week", "b"]]},
+    {"style": "center", "marker": "", "spans": [["• Tuesday: ", ""], ["Bible study", "b"]]},
+    {"style": "center", "marker": "", "spans": [["2. Choir", ""]]}]},
+  {"name": "a no-break space is a space for the marks", "box": "prayer", "text": "*\u00a0not italic\u00a0*\n# \u00a0\n- \u00a0trimmed item",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["*\u00a0not italic\u00a0*\n# \u00a0", ""]]},
+    {"style": "item", "marker": "•", "spans": [["trimmed item", ""]]}]},
+  {"name": "a tab is a space for the marks", "box": "prayer", "text": "*\tnot italic\t*\n-\tnot a list\n#\tnot a heading\n- \ttrimmed item",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["*\tnot italic\t*\n-\tnot a list\n#\tnot a heading", ""]]},
+    {"style": "item", "marker": "•", "spans": [["trimmed item", ""]]}]},
+  {"name": "an indented line is text", "box": "prayer", "text": " - indented\n  1. indented\n # indented",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [[" - indented\n  1. indented\n # indented", ""]]}]},
+  {"name": "a mark after a letter does not open", "box": "prayer", "text": "a*b* c and x**y** z",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["a*b* c and x**y** z", ""]]}]},
+  {"name": "a backslash before a line's mark prints it", "box": "prayer", "text": "\\- not a list\n\\# not a heading\n1\\. not a number",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["- not a list\n# not a heading\n1. not a number", ""]]}]},
+  {"name": "dialogue with no label and a hash line", "box": "dialogue", "text": "# Gathering\nCome and **worship**.",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["# Gathering\nCome and ", ""], ["worship", "b"], [".", ""]]}]},
+  {"name": "an underscore is not a letter for the marks", "box": "prayer", "text": "snake_*case*_ and _**bold**_",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["snake_", ""], ["case", "i"], ["_ and _", ""], ["bold", "b"], ["_", ""]]}]},
+  {"name": "an underscore is a word character for the labels", "box": "dialogue", "text": "Leader: one_People: two\nPeople: three",
+   "lines": [
+    {"style": "hanging", "marker": "", "spans": [["Leader: ", ""], ["one_People: two", ""]]},
+    {"style": "hanging", "marker": "", "spans": [["People: ", "b"], ["three", "b"]]}]},
+  {"name": "a People line outside the Call to Worship prints as typed", "box": "prayer", "text": "Leader: Lord, in your mercy,\nPeople: hear our prayer.",
+   "lines": [
+    {"style": "body", "marker": "", "spans": [["Leader: Lord, in your mercy,\nPeople: hear our prayer.", ""]]}]}
+ ]
+}

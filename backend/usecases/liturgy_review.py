@@ -515,7 +515,9 @@ def _log(facts: Mapping[str, Any], started: float, clock: Callable[[], float], *
 
 REVISE_INSTRUCTION = (
     "Revise this draft to address these notes only. Keep everything that works. Keep the same form "
-    "(Leader/People lines where present) and about the same length. Output only the revised text."
+    "(Leader/People lines where present) and about the same length. Keep any formatting marks the draft "
+    "has (**bold**, *italic*, lines starting # or ## for headings, - or 1. for lists) where they still fit, "
+    "and add none. Output only the revised text."
 )
 TOO_LONG_TO_REVISE = "This prayer is too long to revise."
 REVISE_BUDGET_S = GENERATE_BUDGET_S       # 80 s from the start of the usecase, as a generated section

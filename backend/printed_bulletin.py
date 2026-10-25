@@ -30,6 +30,10 @@ python-docx here.
   alone where the picture would be (PR 3 planning answer 6); and PR 1's
   [Cover picture] box when no bulletin was posted or it did not say (a page
   from before PR 3b), so those pages print as before.
+- Formatting (formatting spec): a box's text prints through `formatted`
+  (headings, items, bold and italic as formatting.parse reads them) and the
+  Call to Worship's and the Assurance's parts through `_spans` (bold and
+  italic only); text without a mark prints exactly as before.
 - printed_date, printed_filename, PDF_MIME.
 """
 from __future__ import annotations
@@ -41,8 +45,10 @@ from dataclasses import dataclass, field, fields
 from typing import Literal, Optional
 
 import affirmation as af
+import formatting as fmt
 from affirmation import APOSTLES_CREED  # noqa: F401 (printed_bulletin.APOSTLES_CREED, as before)
 from bulletin_settings import GLORIA_PATRI, BulletinSettings
+from formatting import Span
 from liturgy_config import ASSURANCE_RESPONSE, COMMUNION_BLOCKS
 from service_bulletin import Announcements, Music, ServiceBulletin
 from service_output import MONTHS, ResolvedHymn, ResolvedService, safe_date, service_date_display
@@ -72,14 +78,9 @@ TEXT_UNAVAILABLE = "[Reading text unavailable]"
 ROLE_TITLES = {"worship_leader": "Worship Leader", "liturgist": "Liturgist", "organist": "Organist"}
 
 Style = Literal["header", "element", "section", "body", "bold", "hanging", "indent", "note", "credit",
-                "title", "box", "contact", "center"]
-
-
-@dataclass(frozen=True)
-class Span:
-    text: str
-    bold: bool = False
-    italic: bool = False
+                "title", "box", "contact", "center",
+                # formatting (formatting spec): a box's headings and list items
+                "heading1", "heading2", "item", "center_heading1", "center_heading2"]
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,7 @@ class Line:
     style: Style
     spans: tuple[Span, ...]
     right: str = ""
+    marker: str = ""           # an "item" line's bullet or typed number (formatting spec)
     starred: bool = field(default=False, compare=False)   # a heading the settings star (the stand note's rule)
 
     @property
@@ -165,22 +167,58 @@ def reading_paragraphs(text: str, keep_lines: bool = False) -> list[str]:
     return [p for p in paragraphs if p]
 
 
+def _spans(text: str, bold: bool = False) -> tuple[Span, ...]:
+    """A dialogue part's text: bold and italic only (formatting.INLINE_ONLY);
+    without a mark, one span as before."""
+    if not fmt.has_marks(text, inline_only=True):
+        return (Span(text, bold=bold),)
+    return fmt.merge(Span(s.text, bold or s.bold, s.italic) for s in fmt.inline(text))
+
+
+def formatted(text: str, style: Style = "body", *, bold: bool = False) -> list[Line]:
+    """A box's text as printed lines (formatting spec). Without a mark, one
+    line in `style`, as before. Otherwise one line per block: text in
+    `style`; a heading as "heading1" or "heading2" (always bold); an item as
+    "item" with its marker; `style` "center" (the announcements) keeps them
+    centered: "center_heading1", "center_heading2", and an item as a centered
+    line starting with its marker. `bold` makes every span bold (the Prayer of
+    Confession, the Affirmation's own text)."""
+    if not fmt.has_marks(text):
+        return [Line(style, (Span(text, bold=bold),))]
+    center = style == "center"
+    lines = []
+    for block in fmt.parse(text):
+        if block.kind in ("heading1", "heading2"):
+            spans = fmt.merge(Span(s.text, True, s.italic) for s in block.spans)
+            lines.append(Line(f"center_{block.kind}" if center else block.kind, spans))
+            continue
+        spans = fmt.merge(Span(s.text, bold or s.bold, s.italic) for s in block.spans)
+        if block.kind == "text":
+            lines.append(Line(style, spans))
+        elif center:
+            lines.append(Line(style, fmt.merge((Span(f"{block.marker} ", bold=bold), *spans))))
+        else:
+            lines.append(Line("item", spans, marker=block.marker))
+    return lines
+
+
 def _leader_people(text: str) -> list[Line]:
     """worship_service._add_leader_people_paragraph's reading: Leader lines in
-    normal type, People lines in bold, each with a hanging indent."""
+    normal type, People lines in bold, each with a hanging indent; bold and
+    italic marks inside a part (formatting spec)."""
     matches = list(_PEOPLE_LEADER.finditer(text))
     if not matches:
-        return [Line("body", (Span(text),))]
+        return [Line("body", _spans(text))]
     lines = []
     if matches[0].start() > 0 and text[:matches[0].start()].strip():
-        lines.append(Line("body", (Span(text[:matches[0].start()].strip()),)))
+        lines.append(Line("body", _spans(text[:matches[0].start()].strip())))
     for i, m in enumerate(matches):
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         content = text[m.end():end].strip()
         if m.group(1).lower() == "people":
-            lines.append(Line("hanging", (Span("People: ", bold=True), Span(content, bold=True))))
+            lines.append(Line("hanging", (Span("People: ", bold=True), *_spans(content, bold=True))))
         else:
-            lines.append(Line("hanging", (Span("Leader: "), Span(content))))
+            lines.append(Line("hanging", (Span("Leader: "), *_spans(content))))
     return lines
 
 
@@ -193,7 +231,7 @@ def _assurance(text: str) -> list[Line]:
         leader = leader[: people.start()].strip()
     if leader.startswith("Leader:"):
         leader = leader[7:].strip()
-    lines = [Line("hanging", (Span("Leader: "), Span(leader)))] if leader else []
+    lines = [Line("hanging", (Span("Leader: "), *_spans(leader)))] if leader else []
     return [*lines, Line("bold", (Span(ASSURANCE_RESPONSE, bold=True),))]
 
 
@@ -221,7 +259,7 @@ def _hymn(s: BulletinSettings, key: str, hymn: Optional[ResolvedHymn]) -> list[L
 def _text_element(s: BulletinSettings, key: str, label: str, text: str, style: Style = "body") -> list[Line]:
     if not text:
         return []
-    return [_element(s, key, label), Line(style, (Span(text, bold=style == "bold"),))]
+    return [_element(s, key, label), *formatted(text, style, bold=style == "bold")]
 
 
 def _custom(s: BulletinSettings, anchor: str, resolved: ResolvedService) -> list[Line]:
@@ -230,7 +268,7 @@ def _custom(s: BulletinSettings, anchor: str, resolved: ResolvedService) -> list
         if element.insert_after == anchor and element.label:
             lines.append(_element(s, "", element.label))
             if element.text:
-                lines.append(Line("body", (Span(element.text),)))
+                lines += formatted(element.text)
     return lines
 
 
@@ -267,7 +305,7 @@ def _affirmation(s: BulletinSettings, a: af.Affirmation) -> list[Line]:
     if not a.prints():
         return []
     if a.choice == "own":
-        return [_element(s, "affirmation_of_faith", "Affirmation of Faith:"), Line("bold", (Span(a.text, bold=True),))]
+        return [_element(s, "affirmation_of_faith", "Affirmation of Faith:"), *formatted(a.text, "bold", bold=True)]
     text = af.CREED_TEXT[a.choice]
     words = ([Line("bold", (Span(text, bold=True),))] if "\n" not in text
              else [Line("hanging", (Span(sense, bold=True),)) for sense in text.split("\n")])
@@ -439,7 +477,7 @@ def announcements(ps: PrintedService) -> list[Line]:
              for key, label in NAMED_ANNOUNCEMENTS if getattr(a, key)]
     for key, title in ANNOUNCEMENT_SECTIONS:
         if getattr(a, key):
-            lines += [_section(title), Line("center", (Span(getattr(a, key)),))]
+            lines += [_section(title), *formatted(getattr(a, key), "center")]
     if not lines:
         return []
     return [
