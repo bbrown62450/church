@@ -63,7 +63,8 @@ def _add_line(doc, line: pb.Line):
     if line.style in _KEEP_WITH_NEXT:
         fmt.keep_with_next = True
     if line.marker:
-        p.add_run(line.marker + "\t")       # Word's hanging indent is the tab's stop
+        # Word's hanging indent is the tab's stop; the marker bold in a box all bold (the Word copy's too).
+        p.add_run(line.marker + "\t").bold = line.marker_bold or None
     for span in line.spans:
         run = p.add_run(span.text)
         run.bold, run.italic = span.bold or None, span.italic or None

@@ -9,7 +9,8 @@
 
 export type Span = { text: string; bold: boolean; italic: boolean };
 export type LineStyle = "body" | "bold" | "hanging" | "center" | "heading1" | "heading2" | "item" | "center_heading1" | "center_heading2";
-export type PrintedLine = { style: LineStyle; spans: Span[]; marker: string };
+/** `markerBold`: an item's marker in bold, in a box all bold (printed_bulletin.Line.marker_bold). */
+export type PrintedLine = { style: LineStyle; spans: Span[]; marker: string; markerBold?: boolean };
 /** Which printed rule a box follows: a prayer, the all-bold Prayer of Confession (and own Affirmation text), the
  * Call to Worship's Leader and People lines, the Assurance with its fixed response, a centered announcement. */
 export type BoxKind = "prayer" | "confession" | "dialogue" | "assurance" | "announcement";
@@ -203,7 +204,8 @@ function typedPeople(text: string): number {
   return -1;
 }
 
-const line = (style: LineStyle, spans: Span[], marker = ""): PrintedLine => ({ style, spans, marker });
+const line = (style: LineStyle, spans: Span[], marker = "", markerBold = false): PrintedLine =>
+  markerBold ? { style, spans, marker, markerBold } : { style, spans, marker };
 
 /** printed_bulletin._spans: a dialogue part, bold and italic only. */
 function dialogueSpans(text: string, bold = false): Span[] {
@@ -223,7 +225,7 @@ function formatted(text: string, style: LineStyle, bold = false): PrintedLine[] 
     const spans = merge(block.spans.map((s) => span(s.text, bold || s.bold, s.italic)));
     if (block.kind === "text") return line(style, spans);
     if (center) return line(style, merge([span(`${block.marker} `, bold), ...spans]));
-    return line("item", spans, block.marker);
+    return line("item", spans, block.marker, bold);
   });
 }
 

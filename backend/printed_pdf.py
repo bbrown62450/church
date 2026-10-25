@@ -108,6 +108,8 @@ STYLES = {
     "center_heading1": _style("center_heading1", fontSize=12, leading=15, spaceBefore=6, alignment=TA_CENTER),
     "center_heading2": _style("center_heading2", fontSize=11, leading=13, spaceBefore=6, alignment=TA_CENTER),
 }
+# An item of a box all bold (the Prayer of Confession, own Affirmation text): its marker bold too (Line.marker_bold).
+BOLD_ITEM = ParagraphStyle("bold_item", parent=STYLES["item"], bulletFontName="Times-Bold")
 
 
 def _markup(line: pb.Line) -> str:
@@ -130,7 +132,7 @@ def _flowables(line: pb.Line, width: float) -> list[Flowable]:
 def _flowable(line: pb.Line, width: float) -> Flowable:
     # An item's marker is "•" or a typed number (formatting.parse), never the user's other text.
     bullet = {"bulletText": to_pdf_text(line.marker)} if line.marker else {}
-    paragraph = Paragraph(_markup(line), STYLES[line.style], **bullet)
+    paragraph = Paragraph(_markup(line), BOLD_ITEM if line.marker_bold else STYLES[line.style], **bullet)
     if not line.right:
         return paragraph
     right = Paragraph(escape(to_pdf_text(line.right)), STYLES["right"])

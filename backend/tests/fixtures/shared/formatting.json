@@ -62,7 +62,7 @@
   {"name": "the confession is all bold, italic added", "box": "confession", "text": "We confess *our sin*.\n- pride\n# Mercy",
    "lines": [
     {"style": "bold", "marker": "", "spans": [["We confess ", "b"], ["our sin", "bi"], [".", "b"]]},
-    {"style": "item", "marker": "•", "spans": [["pride", "b"]]},
+    {"style": "item", "marker": "•", "marker_bold": true, "spans": [["pride", "b"]]},
     {"style": "heading1", "marker": "", "spans": [["Mercy", "b"]]}]},
   {"name": "dialogue as before", "box": "dialogue", "text": "Leader: The Lord be with you.\nPeople: And also with you.",
    "lines": [

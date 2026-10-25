@@ -63,7 +63,8 @@ def _lines(box: str, text: str) -> list[Line]:
 
 
 def _as_fixture(line: Line) -> dict:
-    return {"style": line.style, "marker": line.marker,
+    """A line in the shared fixtures' form; "marker_bold" only on a bold marker (the Prayer of Confession's items)."""
+    return {"style": line.style, "marker": line.marker, **({"marker_bold": True} if line.marker_bold else {}),
             "spans": [[s.text, ("b" if s.bold else "") + ("i" if s.italic else "")] for s in line.spans]}
 
 
@@ -373,6 +374,38 @@ def test_the_printed_bulletin_reads_the_marks_in_pdf_and_word(church):
     assert (item.paragraph_format.left_indent, item.paragraph_format.first_line_indent) == (Inches(0.25),
                                                                                            Inches(-0.25))
     assert [(r.text, r.bold) for r in _paragraph(word, "We pray for peace and justice.").runs][1] == ("peace", True)
+
+
+def _pdf_runs(content: bytes) -> list[tuple[str, str]]:
+    """The PDF's text pieces with their fonts, in drawing order."""
+    runs = []
+    for page in PdfReader(BytesIO(content)).pages:
+        page.extract_text(visitor_text=lambda text, _cm, _tm, font, _size: runs.append(
+            (text.strip().replace("\x7f", "•"), font.get("/BaseFont") if font else None)) if text.strip() else None)
+    return runs
+
+
+def test_a_box_all_bold_prints_its_list_markers_bold_in_pdf_and_word(church):
+    """The spec's table: the Prayer of Confession is every run bold in all three files, its markers too (the Word copy
+    bolds them: test_every_word_copy_box_reads_the_marks), and so is own Affirmation text in the printed bulletin;
+    another box's markers stay plain (finding 4)."""
+    typed = archive.ServiceInput(service_date=date(2026, 10, 4),
+                                 liturgy=dict(prayer_of_confession="We confess:\n7. our pride",
+                                              opening_prayer="We pray:\n8. the sick"),
+                                 affirmation=af.Affirmation(True, "own", "We trust:\n- in God"))
+
+    def build(fmt):
+        return documents.build_printed(church, typed, fmt, None, charge=lambda n: None).content
+
+    word = Document(BytesIO(build("docx")))
+    assert [(r.text, r.bold) for r in _paragraph(word, "7.\tour pride").runs] == [("7.\t", True), ("our pride", True)]
+    assert [(r.text, r.bold) for r in _paragraph(word, "•\tin God").runs] == [("•\t", True), ("in God", True)]
+    assert [(r.text, r.bold) for r in _paragraph(word, "8.\tthe sick").runs] == [("8.\t", None), ("the sick", None)]
+    runs = _pdf_runs(build("pdf"))
+    for marker, words, font in (("7.", "our pride", "/Times-Bold"), ("•", "in God", "/Times-Bold"),
+                                ("8.", "the sick", "/Times-Roman")):
+        at = runs.index((words, font))
+        assert runs[at - 1] == (marker, font)
 
 
 def test_the_announcements_keep_a_heading_and_a_list_centered():

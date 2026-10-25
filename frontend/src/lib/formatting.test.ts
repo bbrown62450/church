@@ -10,7 +10,12 @@ import { describe, expect, it } from "vitest";
 
 import { hasMarks, parse, printedLines, type BoxKind, type PrintedLine } from "./formatting";
 
-type Case = { name: string; box: BoxKind; text: string; lines: { style: string; marker: string; spans: [string, string][] }[] };
+type Case = {
+  name: string;
+  box: BoxKind;
+  text: string;
+  lines: { style: string; marker: string; marker_bold?: true; spans: [string, string][] }[];
+};
 const read = (name: string) =>
   JSON.parse(readFileSync(new URL(`../../../backend/tests/fixtures/shared/${name}`, import.meta.url), "utf-8")) as {
     assurance_response: string;
@@ -22,6 +27,7 @@ const fuzz = read("formatting_fuzz.json");
 const asFixture = (line: PrintedLine) => ({
   style: line.style,
   marker: line.marker,
+  ...(line.markerBold ? { marker_bold: true } : {}),
   spans: line.spans.map((s) => [s.text, `${s.bold ? "b" : ""}${s.italic ? "i" : ""}`]),
 });
 

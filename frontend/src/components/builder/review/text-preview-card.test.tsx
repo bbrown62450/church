@@ -58,6 +58,7 @@ function filled(): DraftV1 {
   set("assurance", "Leader: In Christ we are forgiven.");
   set("offertory_prayer", "<img src=x onerror=alert(1)> **<b>bold</b>**");
   set("benediction", "   ");
+  set("prayer_of_confession", "We confess:\n1. our pride");
   draft.liturgy.custom_elements = [{ id: "c1", label: "Anthem", text: "Sung by the *choir*", insert_after: "sermon" }];
   draft.bulletin.announcements.other = "# This week\n- Choir";
   return draft;
@@ -90,7 +91,10 @@ describe("the text preview (formatting spec)", () => {
     expect(within(prayer).getByText("justice")).toHaveClass("italic");
     expect(style(within(prayer).getByText("the sick"))).toBe("item");
     expect(within(prayer).getByText("•")).toBeInTheDocument();
-    expect(within(prayer).getByText("12.")).toBeInTheDocument();
+    expect(within(prayer).getByText("12.")).not.toHaveClass("font-bold");
+    // The Prayer of Confession's markers are bold, as every file prints them.
+    const confession = within(card).getByRole("region", { name: "Prayer of Confession" });
+    expect(within(confession).getByText("1.")).toHaveClass("font-bold");
     const call = within(card).getByRole("region", { name: "Call to Worship" });
     expect(within(call).getByText("People:", { exact: false })).toHaveClass("font-bold");
     expect(within(call).getByText("gladly")).toHaveClass("font-bold", "italic");
@@ -151,8 +155,18 @@ describe("previewBoxes (formatting spec)", () => {
           { text: ".", bold: true, italic: false },
         ],
       },
-      { style: "item", marker: "•", spans: [{ text: "who made us", bold: true, italic: false }] },
+      { style: "item", marker: "•", markerBold: true, spans: [{ text: "who made us", bold: true, italic: false }] },
     ]);
+  });
+
+  it("leaves out a custom element whose label is blank, as the server does", () => {
+    const draft = testDraft();
+    draft.liturgy.custom_elements = [
+      { id: "blank", label: " \u000b ", text: "Sung by the choir", insert_after: "sermon" },
+      { id: "named", label: " Anthem ", text: "Sung by the choir", insert_after: "sermon" },
+    ];
+    const custom = previewBoxes(draft).filter((b) => b.id.startsWith("custom-"));
+    expect(custom.map((b) => [b.id, b.label])).toEqual([["custom-named", "Anthem"]]);
   });
 
   it("leaves out a switched-off card, and the Affirmation when it is off or a creed", () => {

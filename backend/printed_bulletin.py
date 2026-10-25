@@ -91,6 +91,7 @@ class Line:
     spans: tuple[Span, ...]
     right: str = ""
     marker: str = ""           # an "item" line's bullet or typed number (formatting spec)
+    marker_bold: bool = False  # the marker in bold: a box all bold (the Prayer of Confession, own Affirmation text)
     starred: bool = field(default=False, compare=False)   # a heading the settings star (the stand note's rule)
 
     @property
@@ -198,7 +199,7 @@ def formatted(text: str, style: Style = "body", *, bold: bool = False) -> list[L
         elif center:
             lines.append(Line(style, fmt.merge((Span(f"{block.marker} ", bold=bold), *spans))))
         else:
-            lines.append(Line("item", spans, marker=block.marker))
+            lines.append(Line("item", spans, marker=block.marker, marker_bold=bold))
     return lines
 
 

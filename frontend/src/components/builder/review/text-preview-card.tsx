@@ -82,7 +82,7 @@ export function PrintedText({ lines }: { lines: PrintedLine[] }) {
           <p key={n} data-style={line.style} className={LINE_CLASS[line.style]}>
             {line.marker ? (
               <>
-                <span>{line.marker}</span>
+                <span className={cn(line.markerBold && "font-bold")}>{line.marker}</span>
                 <span>{spans}</span>
               </>
             ) : (
